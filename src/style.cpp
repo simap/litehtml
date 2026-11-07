@@ -1837,6 +1837,20 @@ namespace litehtml
         }
     }
 
+    void style::retain_custom_properties()
+    {
+        for(auto it = m_properties.begin(); it != m_properties.end();)
+        {
+            if(_s(it->first).compare(0, 2, "--") == 0)
+            {
+                ++it;
+            } else
+            {
+                it = m_properties.erase(it);
+            }
+        }
+    }
+
     const property_value& style::get_property(string_id name) const
     {
         auto it = m_properties.find(name);

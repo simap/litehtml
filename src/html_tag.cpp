@@ -388,6 +388,8 @@ namespace litehtml
 
         // every stylesheet has been applied by now; drop the push_back slack of the restyle list
         m_used_styles.shrink_to_fit();
+        // the declared values are no longer needed; keep custom properties for descendants' var()
+        m_style.retain_custom_properties();
 
         if(recursive)
         {
