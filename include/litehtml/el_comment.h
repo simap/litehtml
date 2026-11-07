@@ -20,6 +20,10 @@ namespace litehtml
             // Comments are not rendered
             return nullptr;
         }
+        bool can_create_render_item() const override
+        {
+            return false;
+        }
     };
 } // namespace litehtml
 

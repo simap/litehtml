@@ -151,6 +151,9 @@ namespace litehtml
 
         std::tuple<element::ptr, element::ptr, element::ptr> split_inlines();
         virtual std::shared_ptr<render_item> create_render_item(const std::shared_ptr<render_item>& parent_ri);
+        // False when create_render_item() returns null for this element after compute, so its whole subtree is
+        // never rendered. Used by the prune_unrendered option of document::createFromString.
+        virtual bool can_create_render_item() const;
         // Static render support, see document::release_restyle_state. Frees the state that only a restyle
         // reads: matched selectors, counters, and in subclasses declared properties, attributes, and
         // stylesheet or script source text. keep_attributes keeps the attribute map and classes.

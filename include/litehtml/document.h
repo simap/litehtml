@@ -83,6 +83,9 @@ namespace litehtml
         document_mode                           m_mode      = no_quirks_mode;
         bool                                    m_finalized = false;
         bool                                    m_restyle_released = false;
+        bool                                    m_prune_unrendered = false;
+        size_t                                  m_pruned_before_render = 0;
+        size_t                                  m_pruned_after_init    = 0;
 
       public:
         document(document_container* objContainer);
@@ -165,9 +168,31 @@ namespace litehtml
         }
 
         // see doc/document_createFromString.txt
+        // prune_unrendered: see set_prune_unrendered.
         static document::ptr createFromString(const estring& str, document_container* container,
-                                              const std::string& master_styles = litehtml::master_css,
-                                              const std::string& user_styles   = {});
+                                              const std::string& master_styles   = litehtml::master_css,
+                                              const std::string& user_styles     = {},
+                                              bool               prune_unrendered = false);
+
+        // Static render support, off by default. Set before finalization (createFromString does it from its
+        // argument). After styles are computed, removes from the DOM every subtree that cannot produce a
+        // render item (display:none elements, head, script and style elements, comments) and frees script
+        // source text; after the render tree is built, removes elements that got no render item (for example
+        // whitespace dropped at block edges). Restyles cannot bring pruned content back: hover-revealed menus,
+        // media or language changes that would unhide content, and selectors evaluated later lose them.
+        void set_prune_unrendered(bool on)
+        {
+            m_prune_unrendered = on;
+        }
+        // Elements removed by pruning: before the render tree was built, and after it was initialized.
+        size_t pruned_before_render() const
+        {
+            return m_pruned_before_render;
+        }
+        size_t pruned_after_init() const
+        {
+            return m_pruned_after_init;
+        }
 
         // The mode must be set before any element is created, because it is used in html_tag::set_attr.
         void set_document_mode(document_mode mode);
@@ -186,6 +211,10 @@ namespace litehtml
         void         create_node(void* gnode, elements_list& elements, bool parseTextNode, bool process_root);
         bool         update_media_lists(const media_features& features);
         void         fix_tables_layout();
+        static size_t subtree_size(const element& el);
+        static size_t prune_never_rendered(element& el);
+        static bool   subtree_unregistered(const element& el);
+        static size_t prune_unregistered(element& el);
         void fix_table_children(const std::shared_ptr<render_item>& el_ptr, style_display disp, const char* disp_str);
         void fix_table_parent(const std::shared_ptr<render_item>& el_ptr, style_display disp, const char* disp_str);
     };

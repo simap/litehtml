@@ -186,6 +186,16 @@ namespace litehtml
         return ret;
     }
 
+    bool element::can_create_render_item() const
+    {
+        // the display values for which element::create_render_item creates an item
+        return is_one_of(css().get_display(), display_table_column, display_table_column_group,
+                         display_table_footer_group, display_table_header_group, display_table_row_group,
+                         display_table_row, display_block, display_table_cell, display_table_caption,
+                         display_list_item, display_inline_block, display_table, display_inline_table,
+                         display_inline, display_inline_text, display_flex, display_inline_flex);
+    }
+
     void element::release_restyle_state(bool /*keep_attributes*/)
     {
         m_used_styles      = decltype(m_used_styles)();

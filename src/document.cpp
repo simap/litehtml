@@ -28,7 +28,16 @@
 #include "stylesheet.h"
 #include "types.h"
 #ifdef LITEHTML_STATIC_RELEASE_ENV
+#include <cstdio>
 #include <cstdlib>
+// Host measurement hook: called with a phase name at the end of each phase (parse, cascade, tree, layout,
+// release). Set by the lane harness (harness/lanes/static-release/phase_hook.cpp).
+extern "C" void (*litehtml_static_phase_hook)(const char* phase);
+void (*litehtml_static_phase_hook)(const char* phase) = nullptr;
+#define LH_PHASE(name)                                                                                                 \
+    if(litehtml_static_phase_hook) litehtml_static_phase_hook(name)
+#else
+#define LH_PHASE(name)
 #endif
 
 namespace litehtml
@@ -52,10 +61,19 @@ namespace litehtml
     }
 
     document::ptr document::createFromString(const estring& str, document_container* container,
-                                             const std::string& master_styles, const std::string& user_styles)
+                                             const std::string& master_styles, const std::string& user_styles,
+                                             bool prune_unrendered)
     {
         // Create litehtml::document
         document::ptr doc = std::make_shared<document>(container);
+#ifdef LITEHTML_STATIC_RELEASE_ENV
+        // host measurement hook, see render()
+        if(getenv("LITEHTML_PRUNE"))
+        {
+            prune_unrendered = true;
+        }
+#endif
+        doc->m_prune_unrendered = prune_unrendered;
 
         // Parse document into GumboOutput
         GumboOutput* output = doc->parse_html(str);
@@ -88,11 +106,19 @@ namespace litehtml
         // EXP: the HTML copy is only needed while gumbo output is alive
         doc->m_text.clear();
         doc->m_text.shrink_to_fit();
+        LH_PHASE("parse");
 
         doc->finalize_from_external_root(root, master_styles, user_styles);
         // EXP: stylesheet source text copies are parsed by now
         doc->m_css.clear();
         doc->m_css.shrink_to_fit();
+#ifdef LITEHTML_STATIC_RELEASE_ENV
+        if(prune_unrendered)
+        {
+            fprintf(stderr, "STATIC_PRUNE before_render=%zu after_init=%zu total=%zu\n", doc->m_pruned_before_render,
+                    doc->m_pruned_after_init, doc->m_pruned_before_render + doc->m_pruned_after_init);
+        }
+#endif
 
         return doc;
     }
@@ -168,6 +194,12 @@ namespace litehtml
             // Initialize element::m_css
             m_root->compute_styles();
 
+            if(m_prune_unrendered)
+            {
+                m_pruned_before_render = prune_never_rendered(*m_root);
+            }
+            LH_PHASE("cascade");
+
             // Create rendering tree
             m_root_render = m_root->create_render_item(nullptr);
 
@@ -182,7 +214,79 @@ namespace litehtml
             {
                 m_root_render = m_root_render->init();
             }
+
+            if(m_prune_unrendered)
+            {
+                m_pruned_after_init = prune_unregistered(*m_root);
+            }
         }
+        LH_PHASE("tree");
+    }
+
+    size_t document::subtree_size(const element& el)
+    {
+        size_t n = 1;
+        for(const auto& child : el.m_children)
+        {
+            n += subtree_size(*child);
+        }
+        return n;
+    }
+
+    // Removes the children for which create_render_item would return null; their subtrees are never visited
+    // by it. Returns the number of elements removed.
+    size_t document::prune_never_rendered(element& el)
+    {
+        size_t n = 0;
+        for(auto it = el.m_children.begin(); it != el.m_children.end();)
+        {
+            if(!(*it)->can_create_render_item())
+            {
+                n  += subtree_size(**it);
+                it  = el.m_children.erase(it);
+            } else
+            {
+                (*it)->release_source_text();
+                n += prune_never_rendered(**it);
+                ++it;
+            }
+        }
+        return n;
+    }
+
+    // True when no element of the subtree was registered by render_item::init (add_render).
+    bool document::subtree_unregistered(const element& el)
+    {
+        if(!el.m_renders.empty())
+        {
+            return false;
+        }
+        for(const auto& child : el.m_children)
+        {
+            if(!subtree_unregistered(*child))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    size_t document::prune_unregistered(element& el)
+    {
+        size_t n = 0;
+        for(auto it = el.m_children.begin(); it != el.m_children.end();)
+        {
+            if(subtree_unregistered(**it))
+            {
+                n  += subtree_size(**it);
+                it  = el.m_children.erase(it);
+            } else
+            {
+                n += prune_unregistered(**it);
+                ++it;
+            }
+        }
+        return n;
     }
 
     // https://html.spec.whatwg.org/multipage/parsing.html#change-the-encoding
@@ -612,9 +716,11 @@ namespace litehtml
         // Host measurement hook, compiled only by harness/lanes/static-release/build.sh: the harness cannot
         // call release_restyle_state() between render() and draw(), so release here when LITEHTML_RELEASE is
         // set (value "keep" keeps attributes).
+        LH_PHASE("layout");
         if(const char* rel = getenv("LITEHTML_RELEASE"))
         {
             release_restyle_state(strcmp(rel, "keep") == 0);
+            LH_PHASE("release");
         }
 #endif
         return ret;
