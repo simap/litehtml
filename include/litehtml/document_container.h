@@ -83,6 +83,18 @@ namespace litehtml
         }
         virtual void split_text(const char* text, const std::function<void(const char*)>& on_word,
                                 const std::function<void(const char*)>& on_space);
+        // Memory budget check, called by document::createFromString before each large phase:
+        //   "parse"   before the HTML is parsed; bytes = HTML input size
+        //   "cascade" DOM built and linked stylesheets loaded, before they are parsed and styles are computed;
+        //             bytes = total linked stylesheet source size
+        //   "tree"    styles computed, before the render tree is built; bytes = 0
+        // Return false to stop: createFromString frees what it built and returns nullptr. The default accepts.
+        // With exceptions off an allocation failure inside a phase still aborts; this lets the container
+        // refuse a page before a phase it cannot fit (for example from the free heap and the byte counts).
+        virtual bool check_memory_budget(const char* /*stage*/, size_t /*bytes*/)
+        {
+            return true;
+        }
 
       protected:
         virtual ~document_container() = default;

@@ -99,6 +99,7 @@ namespace litehtml
         bool                                    m_attributes_released   = false;
         size_t                                  m_pruned_before_render = 0;
         size_t                                  m_pruned_after_init    = 0;
+        bool                                    m_budget_refused       = false;
 
       public:
         document(document_container* objContainer);
@@ -231,6 +232,12 @@ namespace litehtml
         size_t pruned_after_init() const
         {
             return m_pruned_after_init;
+        }
+        // True when document_container::check_memory_budget refused a phase of finalization; the document is
+        // incomplete (createFromString returns nullptr instead of it).
+        bool budget_refused() const
+        {
+            return m_budget_refused;
         }
 
         // The mode must be set before any element is created, because it is used in html_tag::set_attr.

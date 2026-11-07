@@ -107,6 +107,10 @@ namespace litehtml
                                                const std::string& user_styles, unsigned static_options)
     {
         LH_PROBE("p0_enter");
+        if(container && !container->check_memory_budget("parse", str.size()))
+        {
+            return nullptr;
+        }
         // Create litehtml::document
         document::ptr doc = std::make_shared<document>(container);
 #ifdef LITEHTML_STATIC_RELEASE_ENV
@@ -166,6 +170,10 @@ namespace litehtml
         LH_PHASE("parse");
 
         doc->finalize_from_external_root(root, master_styles, user_styles);
+        if(doc->m_budget_refused)
+        {
+            return nullptr; // frees the DOM and whatever finalization built
+        }
         // EXP: stylesheet source text copies are parsed by now
         doc->m_css.clear();
         doc->m_css.shrink_to_fit();
@@ -225,6 +233,17 @@ namespace litehtml
             // parse elements attributes
             m_root->parse_attributes();
 
+            size_t css_bytes = 0;
+            for(const auto& css : m_css)
+            {
+                css_bytes += css.text.size();
+            }
+            if(!container()->check_memory_budget("cascade", css_bytes))
+            {
+                m_budget_refused = true;
+                return;
+            }
+
             // parse style sheets linked in document
             for(auto& css : m_css)
             {
@@ -258,6 +277,12 @@ namespace litehtml
                 // the render tree build reads attributes (colspan, rowspan, span, start), keep them for now
                 release_restyle_state(true);
                 LH_PHASE("release");
+            }
+
+            if(!container()->check_memory_budget("tree", 0))
+            {
+                m_budget_refused = true;
+                return;
             }
 
             // Create rendering tree
