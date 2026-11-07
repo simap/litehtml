@@ -687,17 +687,44 @@ namespace
     struct key_writer
     {
         std::string& out;
+        // A key is about 600 bytes written as about 250 scalars. Appending each one to out cost a library
+        // call apiece plus the string's regrowth; they are collected here and appended in a few large blocks.
+        char   buf[1024]; // left uninitialized: a constructor, not aggregate init, which would zero it
+        size_t n = 0;
 
+        explicit key_writer(std::string& o) :
+            out(o)
+        {
+        }
+        ~key_writer() { out.append(buf, n); }
+        key_writer(const key_writer&)            = delete;
+        key_writer& operator=(const key_writer&) = delete;
+
+        void put(const char* p, size_t k)
+        {
+            if(n + k > sizeof(buf))
+            {
+                out.append(buf, n);
+                n = 0;
+                if(k > sizeof(buf))
+                {
+                    out.append(p, k);
+                    return;
+                }
+            }
+            memcpy(buf + n, p, k);
+            n += k;
+        }
         template <class T> void pod(const T& v)
         {
             static_assert(std::is_arithmetic_v<T> || std::is_enum_v<T>, "scalars only");
-            out.append(reinterpret_cast<const char*>(&v), sizeof(T));
+            put(reinterpret_cast<const char*>(&v), sizeof(T));
         }
         void px(litehtml::pixel_t v) { pod(v.value()); }
         void str(const std::string& s)
         {
             pod(s.size());
-            out.append(s);
+            put(s.data(), s.size());
         }
         void len(const litehtml::css_length& l)
         {

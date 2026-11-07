@@ -70,6 +70,7 @@ namespace litehtml
         std::unordered_multimap<size_t, std::unique_ptr<const css_properties>> m_computed_styles;
         const css_properties*                                                 m_default_style = nullptr;
         const css_properties*                                                 m_text_style    = nullptr;
+        std::string m_intern_key, m_intern_other; // scratch for intern_style
         // Text of el_text and el_space nodes. Declared before m_root for the same reason.
         text_arena m_text_arena;
 

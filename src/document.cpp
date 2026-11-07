@@ -733,13 +733,18 @@ namespace litehtml
 
     const css_properties* document::intern_style(const css_properties& style)
     {
-        std::string key;
+        // Both keys are written into document-owned scratch strings, so after the first calls no key
+        // allocates. A stored key per interned style would avoid the second serialization but costs about
+        // 600 bytes per distinct style (0.2 MB on Wikipedia).
+        std::string& key = m_intern_key;
+        key.clear();
         style.append_key(key);
         size_t h     = std::hash<std::string>{}(key);
         auto   range = m_computed_styles.equal_range(h);
         for(auto it = range.first; it != range.second; ++it)
         {
-            std::string other;
+            std::string& other = m_intern_other;
+            other.clear();
             it->second->append_key(other);
             if(other == key)
             {
