@@ -4519,7 +4519,7 @@ GumboOutput* gumbo_parse_with_options(
   return parser._output;
 }
 
-void gumbo_destroy_node(GumboOptions* options, GumboNode* node) {
+void gumbo_destroy_node(const GumboOptions* options, GumboNode* node) {
   // Need a dummy GumboParser because the allocator comes along with the
   // options object.
   GumboParser parser;

@@ -676,6 +676,15 @@ GumboOutput* gumbo_parse_with_options(
 /** Release the memory used for the parse tree & parse errors. */
 void gumbo_destroy_output(const GumboOptions* options, GumboOutput* output);
 
+/**
+ * Release one node and its subtree before the rest of the tree, for consumers
+ * that convert the tree incrementally. The caller must make sure that no later
+ * gumbo_destroy_node or gumbo_destroy_output reaches the node again, for
+ * example by setting the parent's children.length to 0 once every child has
+ * been released. options must match the ones the tree was parsed with.
+ */
+void gumbo_destroy_node(const GumboOptions* options, GumboNode* node);
+
 #ifdef __cplusplus
 }
 #endif

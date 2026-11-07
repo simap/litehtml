@@ -111,9 +111,10 @@ namespace litehtml
             break;
         }
 
-        // Create litehtml::elements.
+        // Create litehtml::elements. This releases the gumbo subtrees below the root as it converts them.
+        GumboOptions  opts = gumbo_parse_options();
         elements_list root_elements;
-        doc->create_node(output->root, root_elements, true, true);
+        doc->create_node(output->root, root_elements, true, true, opts);
         element::ptr root;
         if(!root_elements.empty())
         {
@@ -121,8 +122,7 @@ namespace litehtml
         }
         LH_PROBE("p3_create_node");
 
-        // Destroy GumboOutput
-        GumboOptions opts = gumbo_parse_options();
+        // Destroy GumboOutput: the document and root nodes and anything outside the root
         gumbo_destroy_output(&opts, output);
         LH_PROBE("p4_gumbo_destroyed");
         // EXP: the HTML copy is only needed while gumbo output is alive
@@ -363,7 +363,8 @@ namespace litehtml
         return output;
     }
 
-    void document::create_node(void* gnode, elements_list& elements, bool parseTextNode, bool process_root)
+    void document::create_node(void* gnode, elements_list& elements, bool parseTextNode, bool process_root,
+                               const GumboOptions& gumbo_options)
     {
         auto* node = static_cast<GumboNode*>(gnode);
         switch(node->type)
@@ -405,20 +406,25 @@ namespace litehtml
                         for(unsigned int i = 0; i < node->v.element.children.length; i++)
                         {
                             child.clear();
-                            create_node(static_cast<GumboNode*>(node->v.element.children.data[i]), child, parseTextNode,
-                                        true);
+                            auto* gchild = static_cast<GumboNode*>(node->v.element.children.data[i]);
+                            create_node(gchild, child, parseTextNode, true, gumbo_options);
+                            gumbo_destroy_node(&gumbo_options, gchild);
                             std::for_each(child.begin(), child.end(),
                                           [&ret](element::ptr& el) { ret->appendChild(el); });
                         }
+                        // every child is released; the node itself is released by its parent
+                        node->v.element.children.length = 0;
                         elements.push_back(ret);
                     }
                 } else
                 {
                     for(unsigned int i = 0; i < node->v.element.children.length; i++)
                     {
-                        create_node(static_cast<GumboNode*>(node->v.element.children.data[i]), elements, parseTextNode,
-                                    true);
+                        auto* gchild = static_cast<GumboNode*>(node->v.element.children.data[i]);
+                        create_node(gchild, elements, parseTextNode, true, gumbo_options);
+                        gumbo_destroy_node(&gumbo_options, gchild);
                     }
+                    node->v.element.children.length = 0;
                 }
             }
             break;
@@ -1242,7 +1248,7 @@ namespace litehtml
         // Create litehtml::elements.
         elements_list child_elements;
         // Create elements excluding the root node
-        create_node(output->root, child_elements, true, false);
+        create_node(output->root, child_elements, true, false, opts);
 
         // Destroy GumboOutput
         gumbo_destroy_output(&opts, output);

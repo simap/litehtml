@@ -13,7 +13,8 @@
 #include <unordered_map>
 #include <vector>
 
-using GumboOutput = struct GumboInternalOutput;
+using GumboOutput  = struct GumboInternalOutput;
+using GumboOptions = struct GumboInternalOptions;
 
 namespace litehtml
 {
@@ -178,7 +179,10 @@ namespace litehtml
                                                 document_container* container, const std::string& master_styles,
                                                 const std::string& user_styles);
         GumboOutput*         parse_html(const std::string& str, encoding enc, confidence conf);
-        void         create_node(void* gnode, elements_list& elements, bool parseTextNode, bool process_root);
+        // Converts gnode's subtree and releases each converted child subtree from the gumbo tree as it
+        // goes, so the two trees never coexist in full. gnode itself stays for its parent to release.
+        void         create_node(void* gnode, elements_list& elements, bool parseTextNode, bool process_root,
+                                 const GumboOptions& gumbo_options);
         bool         update_media_lists(const media_features& features);
         void         fix_tables_layout();
         void fix_table_children(const std::shared_ptr<render_item>& el_ptr, style_display disp, const char* disp_str);
