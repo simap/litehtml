@@ -885,6 +885,7 @@ namespace litehtml
         m_tabular_elements = decltype(m_tabular_elements)();
         m_css              = decltype(m_css)();
         m_text             = std::string();
+        m_text_style_memo  = decltype(m_text_style_memo)();
     }
 
     void document::draw(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip)

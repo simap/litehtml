@@ -9,6 +9,7 @@
 #include "text_arena.h"
 #include "types.h"
 
+#include <array>
 #include <functional>
 #include <memory>
 #include <unordered_map>
@@ -71,6 +72,31 @@ namespace litehtml
         const css_properties*                                                 m_default_style = nullptr;
         const css_properties*                                                 m_text_style    = nullptr;
         std::string m_intern_key, m_intern_other; // scratch for intern_style
+
+      public:
+        // Computed style of a text node by its inputs, see el_text::compute_styles. The key is (the node's own
+        // style, the parent's style, the style of the nearest position:relative ancestor in the inline chain
+        // above the node or null, the default style as a marker if that chain ends at an ancestor (a relative
+        // one or a non-inline one) else null). Every pointer is an
+        // interned style, which is immutable and lives as long as the document, so an entry never goes stale:
+        // a restyle or media change that gives an ancestor a new style gives a new key. Dropped with the rest
+        // of the restyle state by release_restyle_state.
+        using text_style_key = std::array<const css_properties*, 4>;
+        struct text_style_key_hash
+        {
+            size_t operator()(const text_style_key& k) const
+            {
+                size_t h = 0;
+                for(auto p : k)
+                {
+                    h = h * 1000003u ^ std::hash<const void*>{}(p);
+                }
+                return h;
+            }
+        };
+        std::unordered_map<text_style_key, const css_properties*, text_style_key_hash> m_text_style_memo;
+
+      private:
         // Text of el_text and el_space nodes. Declared before m_root for the same reason.
         text_arena m_text_arena;
 

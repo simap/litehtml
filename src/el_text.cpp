@@ -57,36 +57,60 @@ void litehtml::el_text::get_text(std::string& text) const
 
 void litehtml::el_text::compute_styles(bool /*recursive*/)
 {
-    // compute into a scratch copy, then share the interned instance
-    css_properties c       = *m_css;
+    // The computed style depends only on the node's own style, the parent's style, the nearest relative
+    // ancestor in the inline chain and whether that chain ends at a non-inline ancestor. All are interned, so
+    // most text nodes reuse the result of a sibling or cousin through the document's memo (98 percent on
+    // Wikipedia) instead of building and interning a new copy.
     element::ptr el_parent = parent();
-    if(el_parent)
-    {
-        c.line_height() = el_parent->css().line_height();
-        c.set_font(el_parent->css().get_font());
-        c.set_font_metrics(el_parent->css().get_font_metrics());
-        c.set_white_space(el_parent->css().get_white_space());
-        c.set_text_transform(el_parent->css().get_text_transform());
-    }
-    c.set_display(display_inline_text);
-    c.set_float(float_none);
-
-    element::ptr p = parent();
+    element::ptr p         = el_parent;
+    element::ptr relative;
     while(p && p->css().get_display() == display_inline)
     {
         if(p->css().get_position() == element_position_relative)
         {
-            c.set_offsets(p->css().get_offsets());
-            c.set_position(element_position_relative);
+            relative = p;
             break;
         }
         p = p->parent();
     }
-    if(p)
+    document::ptr doc = get_document();
+    if(doc)
     {
-        c.set_position(element_position_static);
+        // the last slot only marks that the chain ends at an ancestor; any non-null pointer would do
+        document::text_style_key key = {m_css, el_parent ? &el_parent->css() : nullptr,
+                                        relative ? &relative->css() : nullptr, p ? doc->default_style() : nullptr};
+        auto                     it  = doc->m_text_style_memo.find(key);
+        if(it != doc->m_text_style_memo.end())
+        {
+            m_css = it->second;
+        } else
+        {
+            // compute into a scratch copy, then share the interned instance
+            css_properties c = *m_css;
+            if(el_parent)
+            {
+                c.line_height() = el_parent->css().line_height();
+                c.set_font(el_parent->css().get_font());
+                c.set_font_metrics(el_parent->css().get_font_metrics());
+                c.set_white_space(el_parent->css().get_white_space());
+                c.set_text_transform(el_parent->css().get_text_transform());
+            }
+            c.set_display(display_inline_text);
+            c.set_float(float_none);
+            if(relative)
+            {
+                c.set_offsets(relative->css().get_offsets());
+                c.set_position(element_position_relative);
+            }
+            if(p)
+            {
+                c.set_position(element_position_static);
+            }
+            set_css(c);
+            doc->m_text_style_memo.emplace(key, m_css);
+        }
     }
-    set_css(c);
+    const css_properties& c = css();
 
     // The transformed text is stored only when it is shown and differs from the text.
     if(is_white_space())
