@@ -152,6 +152,14 @@ namespace litehtml
         static document::ptr createFromString(const estring& str, document_container* container,
                                               const std::string& master_styles = litehtml::master_css,
                                               const std::string& user_styles   = {});
+        // Same as estring(str) without copying str into a temporary estring. Gumbo parses straight out
+        // of str unless the input has to be decoded, so str must not change during the call.
+        static document::ptr createFromString(const std::string& str, document_container* container,
+                                              const std::string& master_styles = litehtml::master_css,
+                                              const std::string& user_styles   = {});
+        static document::ptr createFromString(const char* str, document_container* container,
+                                              const std::string& master_styles = litehtml::master_css,
+                                              const std::string& user_styles   = {});
 
         // The mode must be set before any element is created, because it is used in html_tag::set_attr.
         void set_document_mode(document_mode mode);
@@ -166,7 +174,10 @@ namespace litehtml
       private:
         uint_ptr add_font(const font_description& descr, font_metrics* fm);
 
-        GumboOutput* parse_html(estring str);
+        static document::ptr create_from_string(const std::string& str, encoding enc, confidence conf,
+                                                document_container* container, const std::string& master_styles,
+                                                const std::string& user_styles);
+        GumboOutput*         parse_html(const std::string& str, encoding enc, confidence conf);
         void         create_node(void* gnode, elements_list& elements, bool parseTextNode, bool process_root);
         bool         update_media_lists(const media_features& features);
         void         fix_tables_layout();

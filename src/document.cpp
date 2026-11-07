@@ -68,12 +68,34 @@ namespace litehtml
     document::ptr document::createFromString(const estring& str, document_container* container,
                                              const std::string& master_styles, const std::string& user_styles)
     {
+        return create_from_string(str, str.encoding, str.confidence, container, master_styles, user_styles);
+    }
+
+    // estring(const std::string&) and estring(const char*) both mean encoding null, confidence certain
+    document::ptr document::createFromString(const std::string& str, document_container* container,
+                                             const std::string& master_styles, const std::string& user_styles)
+    {
+        return create_from_string(str, encoding::null, confidence::certain, container, master_styles, user_styles);
+    }
+
+    document::ptr document::createFromString(const char* str, document_container* container,
+                                             const std::string& master_styles, const std::string& user_styles)
+    {
+        return create_from_string(std::string(str), encoding::null, confidence::certain, container, master_styles,
+                                  user_styles);
+    }
+
+    document::ptr document::create_from_string(const std::string& str, encoding enc, confidence conf,
+                                               document_container* container, const std::string& master_styles,
+                                               const std::string& user_styles)
+    {
         LH_PROBE("p0_enter");
         // Create litehtml::document
         document::ptr doc = std::make_shared<document>(container);
 
-        // Parse document into GumboOutput
-        GumboOutput* output = doc->parse_html(str);
+        // Parse document into GumboOutput. Gumbo keeps pointers into its input, which is str or the
+        // decoded copy in m_text; both live until the output is destroyed below.
+        GumboOutput* output = doc->parse_html(str, enc, conf);
 
         // mode must be set before doc->create_node because it is used in html_tag::set_attr
         switch(output->document->v.document.doc_type_quirks_mode)
@@ -285,30 +307,30 @@ namespace litehtml
     }
 
     // substitute for gumbo_parse that handles encodings
-    GumboOutput* document::parse_html(estring str)
+    GumboOutput* document::parse_html(const std::string& str, encoding enc, confidence conf)
     {
         // https://html.spec.whatwg.org/multipage/parsing.html#the-input-byte-stream
-        encoding_sniffing_algorithm(str);
-        // cannot store output in local variable because gumbo keeps pointers into it,
-        // which will be accessed later in gumbo_tag_from_original_text
-        if(str.encoding == encoding::utf_8)
+        encoding_sniffing_algorithm(str, enc, conf);
+        // Gumbo keeps pointers into its input (read later in gumbo_tag_from_original_text), so the input
+        // must outlive the output: UTF-8 is parsed in place from the caller's string, which lives until
+        // createFromString returns; anything else is decoded into m_text.
+        const std::string* input = &str;
+        if(enc != encoding::utf_8)
         {
-            m_text = str;
-        } else
-        {
-            decode(str, str.encoding, m_text);
+            decode(str, enc, m_text);
+            input = &m_text;
         }
 
         // Gumbo does not support callbacks on node creation, so we cannot change encoding while parsing.
         // Instead, we parse entire file and then handle <meta> tags.
 
-        // Using gumbo_parse_with_options to pass string length (m_text may contain NUL chars).
+        // Using gumbo_parse_with_options to pass string length (the input may contain NUL chars).
         LH_PROBE("p1_before_gumbo");
         GumboOptions opts   = gumbo_parse_options();
-        GumboOutput* output = gumbo_parse_with_options(&opts, m_text.data(), m_text.size());
+        GumboOutput* output = gumbo_parse_with_options(&opts, input->data(), input->size());
         LH_PROBE("p2_gumbo_parsed");
 
-        if(str.confidence == confidence::certain)
+        if(conf == confidence::certain)
         {
             return output;
         }
@@ -320,21 +342,21 @@ namespace litehtml
         if(meta_encoding != encoding::null)
         {
             // ...and it is different from currently used encoding...
-            encoding new_encoding = adjust_meta_encoding(meta_encoding, str.encoding);
-            if(new_encoding != str.encoding)
+            encoding new_encoding = adjust_meta_encoding(meta_encoding, enc);
+            if(new_encoding != enc)
             {
                 // ...reparse with the new encoding.
                 gumbo_destroy_output(&opts, output);
                 m_text.clear();
+                m_text.shrink_to_fit();
 
-                if(new_encoding == encoding::utf_8)
-                {
-                    m_text = str;
-                } else
+                input = &str;
+                if(new_encoding != encoding::utf_8)
                 {
                     decode(str, new_encoding, m_text);
+                    input = &m_text;
                 }
-                output = gumbo_parse_with_options(&opts, m_text.data(), m_text.size());
+                output = gumbo_parse_with_options(&opts, input->data(), input->size());
             }
         }
 

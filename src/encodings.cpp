@@ -8256,12 +8256,18 @@ namespace litehtml
     // see also doc/document_createFromString.txt
     void encoding_sniffing_algorithm(estring& str)
     {
+        encoding_sniffing_algorithm(str, str.encoding, str.confidence);
+    }
+
+    // Same, for a string held elsewhere: enc and conf are the given encoding on input and the result on output.
+    void encoding_sniffing_algorithm(const std::string& str, litehtml::encoding& enc, litehtml::confidence& conf)
+    {
         // 1. If the result of BOM sniffing is an encoding, return that encoding with confidence certain.
         encoding encoding = bom_sniff(str);
         if(encoding != encoding::null)
         {
-            str.encoding   = encoding;
-            str.confidence = confidence::certain;
+            enc  = encoding;
+            conf = confidence::certain;
             return;
         }
 
@@ -8271,7 +8277,7 @@ namespace litehtml
 
         // 4. HTTP encoding -> return { encoding, confidence: certain}
 
-        if(str.encoding != encoding::null && str.confidence == confidence::certain)
+        if(enc != encoding::null && conf == confidence::certain)
         {
             return;
         }
@@ -8282,8 +8288,8 @@ namespace litehtml
         encoding = prescan_for_encoding(str);
         if(encoding != encoding::null)
         {
-            str.encoding   = encoding;
-            str.confidence = confidence::tentative;
+            enc  = encoding;
+            conf = confidence::tentative;
             return;
         }
 
@@ -8297,13 +8303,12 @@ namespace litehtml
         //    may be UTF-8 or depends on locale or smth else
 
         // if str has no encoding, use the default one
-        if(str.encoding == encoding::null)
+        if(enc == encoding::null)
         {
-            str.encoding = encoding::utf_8;
-            str.confidence =
-                confidence::tentative; // tentative means it will be overridden by <meta> encoding if present
+            enc  = encoding::utf_8;
+            conf = confidence::tentative; // tentative means it will be overridden by <meta> encoding if present
         }
-        // otherwise use str.encoding (tentative)
+        // otherwise use enc (tentative)
     }
 
 } // namespace litehtml

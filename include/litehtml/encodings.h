@@ -89,6 +89,7 @@ namespace litehtml
 
     encoding bom_sniff(const std::string& str);
     void     encoding_sniffing_algorithm(estring& str);
+    void     encoding_sniffing_algorithm(const std::string& str, encoding& enc, confidence& conf);
 
     encoding get_encoding(std::string label);
     encoding extract_encoding_from_meta_element(std::string str);
