@@ -41,17 +41,20 @@ namespace litehtml
     size_t reset_string_ids()
     {
         lock_guard;
-        if(array.size() <= static_id_count)
+        size_t dropped = 0;
+        if(array.size() > static_id_count)
         {
-            return 0;
+            dropped = array.size() - static_id_count;
+            for(size_t i = static_id_count; i < array.size(); i++)
+            {
+                map.erase(array[i]);
+            }
+            array.resize(static_id_count);
         }
-        size_t dropped = array.size() - static_id_count;
-        for(size_t i = static_id_count; i < array.size(); i++)
-        {
-            map.erase(array[i]);
-        }
-        array.resize(static_id_count);
-        array.shrink_to_fit();
+        // release the capacity too (and the growth slack of static initialization); a page grows the array
+        // to the next power of two above its id count, 196,608 B kept on the device after Wikipedia, and
+        // std::vector::shrink_to_fit does not release it there (see litehtml::shrink_to_fit)
+        litehtml::shrink_to_fit(array);
         return dropped;
     }
 
