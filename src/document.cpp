@@ -1261,6 +1261,10 @@ namespace litehtml
             parent_render->children().clear();
         }
 
+        // parent is computed already, so split its new whitespace runs here (html_tag::compute_styles does it
+        // for every other level)
+        split_space_runs(child_elements, parent.css().get_white_space(), shared_from_this(), nullptr);
+
         // Let's process created elements tree
         for(const auto& child : child_elements)
         {
