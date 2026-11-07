@@ -35,7 +35,7 @@ litehtml::render_item::render_item(std::shared_ptr<element> _src_el) :
     set_box(mrg, pad, brd);
 }
 
-void litehtml::render_item::update_intrinsic_size()
+void litehtml::render_item_box::update_intrinsic_size()
 {
     m_intrinsic_max_size.width  = 0_px;
     m_intrinsic_max_size.height = 0_px;
@@ -902,7 +902,7 @@ void litehtml::render_item::render_positioned(render_type rt)
 
             if(el_position == element_position_fixed)
             {
-                src_el()->get_document()->add_fixed_box(el->m_bounds);
+                src_el()->get_document()->add_fixed_box(el->get_bounds());
             }
         }
 
@@ -937,7 +937,7 @@ void litehtml::render_item::calc_bounds()
 {
     if(is_visible())
     {
-        m_bounds = {content_left(), content_top(), content_width(), content_height()};
+        position bounds = {content_left(), content_top(), content_width(), content_height()};
 
         if(src_el()->css().get_overflow() == overflow_visible)
         {
@@ -946,34 +946,35 @@ void litehtml::render_item::calc_bounds()
                 if(el->src_el()->css().get_position() != element_position_fixed)
                 {
                     el->calc_bounds();
-                    auto child_bounds  = el->m_bounds;
+                    auto child_bounds  = el->get_bounds();
                     child_bounds.x    += m_pos.x;
                     child_bounds.y    += m_pos.y;
-                    m_bounds.add_bounds(child_bounds);
+                    bounds.add_bounds(child_bounds);
                 }
             }
         }
+        set_bounds(bounds);
     }
 }
 
 void litehtml::render_item::calc_document_size(litehtml::size& sz, pixel_t x /*= 0*/, pixel_t y /*= 0*/)
 {
-    m_bounds = {content_left(), content_top(), content_width(), content_height()};
+    position bounds = {content_left(), content_top(), content_width(), content_height()};
 
-    auto inline_processed = for_inline_boxes([this, &sz, &x, &y](const position& box, bool, bool) {
+    auto inline_processed = for_inline_boxes([this, &bounds, &sz, &x, &y](const position& box, bool, bool) {
         sz.width  = std::max(sz.width, x + box.x + box.width);
         sz.height = std::max(sz.height, y + box.y + box.height);
-        m_bounds.add_bounds({m_pos.x + box.x, m_pos.y + box.y, box.width, box.height});
+        bounds.add_bounds({m_pos.x + box.x, m_pos.y + box.y, box.width, box.height});
         return true;
     });
 
-    auto add_bounds = [this](const std::shared_ptr<render_item>& el) {
+    auto add_bounds = [this, &bounds](const std::shared_ptr<render_item>& el) {
         if(el->css().get_position() != element_position_fixed)
         {
-            auto child_bounds  = el->m_bounds;
+            auto child_bounds  = el->get_bounds();
             child_bounds.x    += m_pos.x;
             child_bounds.y    += m_pos.y;
-            m_bounds.add_bounds(child_bounds);
+            bounds.add_bounds(child_bounds);
         }
     };
 
@@ -1033,6 +1034,7 @@ void litehtml::render_item::calc_document_size(litehtml::size& sz, pixel_t x /*=
             add_bounds(el);
         }
     }
+    set_bounds(bounds);
 }
 
 void litehtml::render_item::draw_stacking_context(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip,
@@ -1063,7 +1065,7 @@ void litehtml::render_item::draw_stacking_context(uint_ptr hdc, pixel_t x, pixel
     bool process = true;
     if(clip)
     {
-        auto bounds  = m_bounds;
+        auto bounds  = get_bounds();
         bounds.x    += x - get_scroll_left();
         bounds.y    += y - get_scroll_top();
         if(!clip->does_intersect(&bounds))
@@ -1104,7 +1106,7 @@ void litehtml::render_item::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, co
 {
     if(clip && flag != draw_positioned)
     {
-        auto bounds  = m_bounds;
+        auto bounds  = get_bounds();
         bounds.x    += x - get_scroll_left();
         bounds.y    += y - get_scroll_top();
         if(!clip->does_intersect(&bounds))

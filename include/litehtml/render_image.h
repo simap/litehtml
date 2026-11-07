@@ -5,7 +5,7 @@
 
 namespace litehtml
 {
-    class render_item_image : public render_item
+    class render_item_image : public render_item_box
     {
       protected:
         pixel_t calc_max_height(pixel_t image_height, pixel_t containing_block_height);
@@ -16,7 +16,7 @@ namespace litehtml
 
       public:
         explicit render_item_image(std::shared_ptr<element> src_el) :
-            render_item(std::move(src_el))
+            render_item_box(std::move(src_el))
         {
         }
 

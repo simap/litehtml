@@ -117,9 +117,6 @@ namespace litehtml
 
       protected:
         position m_pos;
-        size     m_intrinsic_min_size;
-        size     m_intrinsic_max_size;
-        position m_bounds; // bounding box of the element
         bool     m_skip = false;
 
         containing_block_context calculate_containing_block_context(const containing_block_context& cb_context) const;
@@ -158,17 +155,12 @@ namespace litehtml
             }
         }
 
-        const size& get_intrinsic_max_size() const
-        {
-            return m_intrinsic_max_size;
-        }
-
-        const size& get_intrinsic_min_size() const
-        {
-            return m_intrinsic_min_size;
-        }
-
-        void update_intrinsic_size();
+        // Intrinsic sizes and the bounding box are stored by render_item_box and computed by render_text
+        virtual size     get_intrinsic_max_size() const         = 0;
+        virtual size     get_intrinsic_min_size() const         = 0;
+        virtual void     update_intrinsic_size()                = 0;
+        virtual position get_bounds() const                     = 0; // bounding box of the element
+        virtual void     set_bounds(const position& /*bounds*/) = 0;
 
         pixel_t h_scroll(pixel_t dx)
         {
@@ -659,6 +651,40 @@ namespace litehtml
          * @return
          */
         void get_rendering_boxes(const std::function<void(const position&)>& redraw_box) const;
+    };
+
+    // Base of every render item except render_text. Stores the intrinsic sizes and the bounding box; a text item
+    // computes them from its element and position instead (see render_text).
+    class render_item_box : public render_item
+    {
+      protected:
+        size     m_intrinsic_min_size;
+        size     m_intrinsic_max_size;
+        position m_bounds;
+
+      public:
+        explicit render_item_box(std::shared_ptr<element> src_el) :
+            render_item(std::move(src_el))
+        {
+        }
+
+        size get_intrinsic_max_size() const override
+        {
+            return m_intrinsic_max_size;
+        }
+        size get_intrinsic_min_size() const override
+        {
+            return m_intrinsic_min_size;
+        }
+        void     update_intrinsic_size() override;
+        position get_bounds() const override
+        {
+            return m_bounds;
+        }
+        void set_bounds(const position& bounds) override
+        {
+            m_bounds = bounds;
+        }
     };
 } // namespace litehtml
 

@@ -6,7 +6,7 @@
 
 namespace litehtml
 {
-    class render_item_inline : public render_item
+    class render_item_inline : public render_item_box
     {
       protected:
         void calc_intrinsic_size() override
@@ -18,7 +18,7 @@ namespace litehtml
 
       public:
         explicit render_item_inline(std::shared_ptr<element> src_el) :
-            render_item(std::move(src_el))
+            render_item_box(std::move(src_el))
         {
         }
 
