@@ -318,7 +318,10 @@ bool litehtml::render_item::fetch_positioned()
 {
     bool ret = false;
 
-    m_positioned.clear();
+    if(m_extra)
+    {
+        m_extra->positioned.clear();
+    }
 
     for(auto& el : m_children)
     {
@@ -345,7 +348,7 @@ void litehtml::render_item::render_positioned(render_type rt)
     src_el()->get_document()->container()->get_viewport(view_port);
 
     bool process = false;
-    for(auto& el : m_positioned)
+    for(auto& el : positioned())
     {
         element_position el_position = el->src_el()->css().get_position();
 
@@ -890,9 +893,9 @@ void litehtml::render_item::render_positioned(render_type rt)
         el->render_positioned();
     }
 
-    if(!m_positioned.empty())
+    if(m_extra && !m_extra->positioned.empty())
     {
-        std::stable_sort(m_positioned.begin(), m_positioned.end(),
+        std::stable_sort(m_extra->positioned.begin(), m_extra->positioned.end(),
                          [](const std::shared_ptr<render_item>& Left, const std::shared_ptr<render_item>& Right) {
                              return (Left->src_el()->css().get_z_index() < Right->src_el()->css().get_z_index());
                          });
@@ -903,7 +906,7 @@ void litehtml::render_item::add_positioned(const std::shared_ptr<litehtml::rende
 {
     if(src_el()->css().get_position() != element_position_static || is_root())
     {
-        m_positioned.push_back(el);
+        extra().positioned.push_back(el);
     } else
     {
         auto el_parent = parent();
@@ -976,12 +979,12 @@ void litehtml::render_item::calc_document_size(litehtml::size& sz, pixel_t x /*=
                     el->calc_document_size(child_size, 0_px, 0_px);
                     add_bounds(el);
                 }
-                if(!m_scroll_view)
+                if(!scroller())
                 {
-                    m_scroll_view = std::make_shared<scroll_view>(m_pos, child_size);
+                    extra().scroll = std::make_shared<scroll_view>(m_pos, child_size);
                 } else
                 {
-                    m_scroll_view->set(m_pos, child_size);
+                    scroller()->set(m_pos, child_size);
                 }
             } else
             {
@@ -1027,7 +1030,7 @@ void litehtml::render_item::draw_stacking_context(uint_ptr hdc, pixel_t x, pixel
     std::map<int, bool> z_indexes;
     if(with_positioned)
     {
-        for(const auto& idx : m_positioned)
+        for(const auto& idx : positioned())
         {
             z_indexes[idx->src_el()->css().get_z_index()];
         }
@@ -1381,7 +1384,7 @@ std::shared_ptr<litehtml::element> litehtml::render_item::get_element_by_point(
 
     std::map<int, bool> z_indexes;
 
-    for(const auto& i : m_positioned)
+    for(const auto& i : positioned())
     {
         z_indexes[i->src_el()->css().get_z_index()];
     }

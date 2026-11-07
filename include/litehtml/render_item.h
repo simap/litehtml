@@ -16,6 +16,14 @@
 namespace litehtml
 {
     class element;
+    class render_item;
+
+    // Members that few render items use. Allocated on first use.
+    struct render_item_extra
+    {
+        std::vector<std::shared_ptr<render_item>> positioned;
+        std::shared_ptr<scroll_view>              scroll;
+    };
 
     class render_item : public std::enable_shared_from_this<render_item>
     {
@@ -23,8 +31,25 @@ namespace litehtml
         std::shared_ptr<element>                  m_element;
         std::weak_ptr<render_item>                m_parent;
         std::list<std::shared_ptr<render_item>>   m_children;
-        std::vector<std::shared_ptr<render_item>> m_positioned;
-        std::shared_ptr<scroll_view>              m_scroll_view;
+        std::unique_ptr<render_item_extra>        m_extra;
+
+        scroll_view* scroller() const
+        {
+            return m_extra ? m_extra->scroll.get() : nullptr;
+        }
+        const std::vector<std::shared_ptr<render_item>>& positioned() const
+        {
+            static const std::vector<std::shared_ptr<render_item>> empty;
+            return m_extra ? m_extra->positioned : empty;
+        }
+        render_item_extra& extra()
+        {
+            if(!m_extra)
+            {
+                m_extra = std::make_unique<render_item_extra>();
+            }
+            return *m_extra;
+        }
 
         margins  m_margins;
         margins  m_padding;
@@ -52,20 +77,22 @@ namespace litehtml
 
         pixel_t get_scroll_left() const
         {
-            return m_scroll_view ? m_scroll_view->get_left() : 0_px;
+            auto sv = scroller();
+            return sv ? sv->get_left() : 0_px;
         }
 
         pixel_t get_scroll_top() const
         {
-            return m_scroll_view ? m_scroll_view->get_top() : 0_px;
+            auto sv = scroller();
+            return sv ? sv->get_top() : 0_px;
         }
 
         void scroll_box(position& box) const
         {
-            if(m_scroll_view)
+            if(auto sv = scroller())
             {
-                box.x -= m_scroll_view->get_left();
-                box.y -= m_scroll_view->get_top();
+                box.x -= sv->get_left();
+                box.y -= sv->get_top();
             }
         }
 
@@ -83,22 +110,26 @@ namespace litehtml
 
         pixel_t h_scroll(pixel_t dx)
         {
-            return m_scroll_view ? m_scroll_view->h_scroll(dx) : 0_px;
+            auto sv = scroller();
+            return sv ? sv->h_scroll(dx) : 0_px;
         }
 
         pixel_t v_scroll(pixel_t dy)
         {
-            return m_scroll_view ? m_scroll_view->v_scroll(dy) : 0_px;
+            auto sv = scroller();
+            return sv ? sv->v_scroll(dy) : 0_px;
         }
 
         bool is_h_scrollable(const pixel_t dx) const
         {
-            return m_scroll_view ? m_scroll_view->is_h_scrollable(dx) : false;
+            auto sv = scroller();
+            return sv ? sv->is_h_scrollable(dx) : false;
         }
 
         bool is_v_scrollable(const pixel_t dy) const
         {
-            return m_scroll_view ? m_scroll_view->is_v_scrollable(dy) : false;
+            auto sv = scroller();
+            return sv ? sv->is_v_scrollable(dy) : false;
         }
 
         std::list<std::shared_ptr<render_item>>& children()
