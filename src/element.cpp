@@ -190,10 +190,10 @@ namespace litehtml
     {
         for(const auto& used_style : m_used_styles)
         {
-            if(used_style->m_selector->is_media_valid())
+            if(used_style.selector().is_media_valid())
             {
-                int res = select(*(used_style->m_selector), true);
-                if((res == select_no_match && used_style->m_used) || (res == select_match && !used_style->m_used))
+                int res = select(used_style.selector(), true);
+                if((res == select_no_match && used_style.used()) || (res == select_match && !used_style.used()))
                 {
                     return true;
                 }

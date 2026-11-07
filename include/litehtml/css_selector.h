@@ -1,6 +1,7 @@
 #ifndef LITEHTML_CSS_SELECTOR_H
 #define LITEHTML_CSS_SELECTOR_H
 
+#include <cstdint>
 #include <utility>
 
 #include "string_id.h"
@@ -252,19 +253,33 @@ namespace litehtml
 
     //////////////////////////////////////////////////////////////////////////
 
+    // A selector that matched an element, kept for restyle (hover, media change). One pointer per entry: the
+    // selector is owned by a document stylesheet, which lives as long as the document, and bit 0 holds the
+    // "applied to this element" flag.
     class used_selector
     {
+        uintptr_t m_bits;
+
       public:
-        using ptr    = std::unique_ptr<used_selector>;
-        using vector = std::vector<used_selector::ptr>;
+        using vector = std::vector<used_selector>;
 
-        css_selector::ptr m_selector;
-        bool              m_used;
-
-        used_selector(css_selector::ptr selector, bool used) :
-            m_selector(std::move(selector)),
-            m_used(used)
+        used_selector(const css_selector* selector, bool used) :
+            m_bits(reinterpret_cast<uintptr_t>(selector) | (used ? 1u : 0u))
         {
+            static_assert(alignof(css_selector) >= 2, "bit 0 of a css_selector pointer must be free");
+        }
+
+        const css_selector& selector() const
+        {
+            return *reinterpret_cast<const css_selector*>(m_bits & ~static_cast<uintptr_t>(1));
+        }
+        bool used() const
+        {
+            return (m_bits & 1u) != 0;
+        }
+        void set_used(bool used)
+        {
+            m_bits = (m_bits & ~static_cast<uintptr_t>(1)) | (used ? 1u : 0u);
         }
     };
 

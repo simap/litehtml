@@ -229,7 +229,7 @@ namespace litehtml
 
             if(apply != select_no_match)
             {
-                used_selector::ptr us = std::make_unique<used_selector>(sel, false);
+                bool used = false;
 
                 if(sel->is_media_valid())
                 {
@@ -267,7 +267,7 @@ namespace litehtml
                                 add_style(*sel->m_style);
                             }
                         }
-                        us->m_used = true;
+                        used = true;
                     };
 
                     if(apply & select_match_pseudo_class)
@@ -280,7 +280,7 @@ namespace litehtml
                             } else
                             {
                                 add_style(*sel->m_style);
-                                us->m_used = true;
+                                used = true;
                             }
                         }
                     } else if((apply & (select_match_with_after | select_match_with_before)))
@@ -289,10 +289,10 @@ namespace litehtml
                     } else
                     {
                         add_style(*sel->m_style);
-                        us->m_used = true;
+                        used = true;
                     }
                 }
-                m_used_styles.push_back(std::move(us));
+                m_used_styles.emplace_back(sel.get(), used);
             }
         }
 
@@ -385,6 +385,9 @@ namespace litehtml
         css_properties computed = *m_css;
         computed.compute(this, doc);
         set_css(computed);
+
+        // every stylesheet has been applied by now; drop the push_back slack of the restyle list
+        m_used_styles.shrink_to_fit();
 
         if(recursive)
         {
@@ -1491,56 +1494,56 @@ namespace litehtml
 
         for(auto& usel : m_used_styles)
         {
-            usel->m_used = false;
+            usel.set_used(false);
 
-            if(usel->m_selector->is_media_valid())
+            if(usel.selector().is_media_valid())
             {
-                int apply = select(*usel->m_selector, false);
+                int apply = select(usel.selector(),false);
 
                 if(apply != select_no_match)
                 {
                     if(apply & select_match_pseudo_class)
                     {
-                        if(select(*usel->m_selector, true))
+                        if(select(usel.selector(),true))
                         {
                             if(apply & select_match_with_after)
                             {
-                                element::ptr el = get_element_after(*usel->m_selector->m_style, false);
+                                element::ptr el = get_element_after(*usel.selector().m_style, false);
                                 if(el)
                                 {
-                                    el->add_style(*usel->m_selector->m_style);
+                                    el->add_style(*usel.selector().m_style);
                                 }
                             } else if(apply & select_match_with_before)
                             {
-                                element::ptr el = get_element_before(*usel->m_selector->m_style, false);
+                                element::ptr el = get_element_before(*usel.selector().m_style, false);
                                 if(el)
                                 {
-                                    el->add_style(*usel->m_selector->m_style);
+                                    el->add_style(*usel.selector().m_style);
                                 }
                             } else
                             {
-                                add_style(*usel->m_selector->m_style);
-                                usel->m_used = true;
+                                add_style(*usel.selector().m_style);
+                                usel.set_used(true);
                             }
                         }
                     } else if(apply & select_match_with_after)
                     {
-                        element::ptr el = get_element_after(*usel->m_selector->m_style, false);
+                        element::ptr el = get_element_after(*usel.selector().m_style, false);
                         if(el)
                         {
-                            el->add_style(*usel->m_selector->m_style);
+                            el->add_style(*usel.selector().m_style);
                         }
                     } else if(apply & select_match_with_before)
                     {
-                        element::ptr el = get_element_before(*usel->m_selector->m_style, false);
+                        element::ptr el = get_element_before(*usel.selector().m_style, false);
                         if(el)
                         {
-                            el->add_style(*usel->m_selector->m_style);
+                            el->add_style(*usel.selector().m_style);
                         }
                     } else
                     {
-                        add_style(*usel->m_selector->m_style);
-                        usel->m_used = true;
+                        add_style(*usel.selector().m_style);
+                        usel.set_used(true);
                     }
                 }
             }
