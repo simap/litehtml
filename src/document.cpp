@@ -28,6 +28,15 @@
 #include "stylesheet.h"
 #include "types.h"
 
+// Parse-phase measurement probes. Compiled out unless LH_PARSE_PROBE is defined; the measurement
+// build links a litehtml_parse_probe() that snapshots the heap tracer (harness/lanes/parse-transient).
+#ifdef LH_PARSE_PROBE
+extern "C" void litehtml_parse_probe(const char* stage);
+#define LH_PROBE(stage) litehtml_parse_probe(stage)
+#else
+#define LH_PROBE(stage) ((void) 0)
+#endif
+
 namespace litehtml
 {
 
@@ -51,6 +60,7 @@ namespace litehtml
     document::ptr document::createFromString(const estring& str, document_container* container,
                                              const std::string& master_styles, const std::string& user_styles)
     {
+        LH_PROBE("p0_enter");
         // Create litehtml::document
         document::ptr doc = std::make_shared<document>(container);
 
@@ -79,17 +89,21 @@ namespace litehtml
         {
             root = root_elements.back();
         }
+        LH_PROBE("p3_create_node");
 
         // Destroy GumboOutput
         gumbo_destroy_output(&kGumboDefaultOptions, output);
+        LH_PROBE("p4_gumbo_destroyed");
         // EXP: the HTML copy is only needed while gumbo output is alive
         doc->m_text.clear();
         doc->m_text.shrink_to_fit();
+        LH_PROBE("p5_source_freed");
 
         doc->finalize_from_external_root(root, master_styles, user_styles);
         // EXP: stylesheet source text copies are parsed by now
         doc->m_css.clear();
         doc->m_css.shrink_to_fit();
+        LH_PROBE("p6_styles_computed");
 
         return doc;
     }
@@ -280,7 +294,9 @@ namespace litehtml
         // Instead, we parse entire file and then handle <meta> tags.
 
         // Using gumbo_parse_with_options to pass string length (m_text may contain NUL chars).
+        LH_PROBE("p1_before_gumbo");
         GumboOutput* output = gumbo_parse_with_options(&kGumboDefaultOptions, m_text.data(), m_text.size());
+        LH_PROBE("p2_gumbo_parsed");
 
         if(str.confidence == confidence::certain)
         {
