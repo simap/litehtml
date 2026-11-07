@@ -186,6 +186,15 @@ namespace litehtml
         return ret;
     }
 
+    void element::release_restyle_state(bool /*keep_attributes*/)
+    {
+        m_used_styles      = decltype(m_used_styles)();
+        m_counter_values   = decltype(m_counter_values)();
+        release_source_text();
+    }
+
+    void element::release_source_text() {}
+
     bool element::requires_styles_update()
     {
         for(const auto& used_style : m_used_styles)

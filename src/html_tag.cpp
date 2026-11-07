@@ -149,6 +149,26 @@ namespace litehtml
         return def;
     }
 
+    void html_tag::release_restyle_state(bool keep_attributes)
+    {
+        element::release_restyle_state(keep_attributes);
+        m_style.clear();
+        if(!keep_attributes)
+        {
+            // draw_list_marker reads list_index (set by render_item_block::init) for ordered markers
+            const char* li         = get_attr("list_index");
+            const bool  has_li     = li != nullptr;
+            std::string list_index = has_li ? li : "";
+            m_attrs                = decltype(m_attrs)();
+            m_str_classes          = decltype(m_str_classes)();
+            m_classes              = decltype(m_classes)();
+            if(has_li)
+            {
+                set_attr("list_index", list_index.c_str());
+            }
+        }
+    }
+
     litehtml::elements_list litehtml::html_tag::select_all(const std::string& selector)
     {
         css_selector sel;

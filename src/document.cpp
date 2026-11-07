@@ -27,6 +27,9 @@
 #include "render_table.h"
 #include "stylesheet.h"
 #include "types.h"
+#ifdef LITEHTML_STATIC_RELEASE_ENV
+#include <cstdlib>
+#endif
 
 namespace litehtml
 {
@@ -605,7 +608,59 @@ namespace litehtml
                 m_root_render->calc_document_size(m_size);
             }
         }
+#ifdef LITEHTML_STATIC_RELEASE_ENV
+        // Host measurement hook, compiled only by harness/lanes/static-release/build.sh: the harness cannot
+        // call release_restyle_state() between render() and draw(), so release here when LITEHTML_RELEASE is
+        // set (value "keep" keeps attributes).
+        if(const char* rel = getenv("LITEHTML_RELEASE"))
+        {
+            release_restyle_state(strcmp(rel, "keep") == 0);
+        }
+#endif
         return ret;
+    }
+
+    static void release_element_tree(const element::ptr& el, bool keep_attributes)
+    {
+        el->release_restyle_state(keep_attributes);
+        for(const auto& child : el->children())
+        {
+            release_element_tree(child, keep_attributes);
+        }
+    }
+
+    // Anonymous boxes (table fixups, inline wrappers) are html_tags outside the DOM, reachable only here.
+    static void release_render_tree(const std::shared_ptr<render_item>& ri, bool keep_attributes)
+    {
+        ri->src_el()->release_restyle_state(keep_attributes);
+        for(const auto& child : ri->children())
+        {
+            release_render_tree(child, keep_attributes);
+        }
+    }
+
+    void document::release_restyle_state(bool keep_attributes)
+    {
+        if(m_restyle_released)
+        {
+            return;
+        }
+        m_restyle_released = true;
+        if(m_root)
+        {
+            release_element_tree(m_root, keep_attributes);
+        }
+        if(m_root_render)
+        {
+            release_render_tree(m_root_render, keep_attributes);
+        }
+        m_master_css       = litehtml::css();
+        m_styles           = litehtml::css();
+        m_user_css         = litehtml::css();
+        m_media_lists      = decltype(m_media_lists)();
+        m_tabular_elements = decltype(m_tabular_elements)();
+        m_css              = decltype(m_css)();
+        m_text             = std::string();
     }
 
     void document::draw(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip)
@@ -924,6 +979,10 @@ namespace litehtml
 
     bool document::media_changed()
     {
+        if(m_restyle_released)
+        {
+            return false; // the stylesheets and declared styles are gone, see release_restyle_state
+        }
         container()->get_media_features(m_media);
         if(update_media_lists(m_media))
         {
@@ -947,7 +1006,7 @@ namespace litehtml
 
     bool document::lang_changed()
     {
-        if(!m_media_lists.empty())
+        if(!m_media_lists.empty() && !m_restyle_released)
         {
             std::string culture;
             container()->get_language(m_lang, culture);
@@ -1178,8 +1237,8 @@ namespace litehtml
 
     void document::append_children_from_string(element& parent, const char* str, bool replace_existing)
     {
-        // parent must belong to this document
-        if(parent.get_document().get() != this)
+        // parent must belong to this document; new elements cannot be styled after release_restyle_state
+        if(parent.get_document().get() != this || m_restyle_released)
         {
             return;
         }

@@ -82,6 +82,7 @@ namespace litehtml
         std::string                             m_text;
         document_mode                           m_mode      = no_quirks_mode;
         bool                                    m_finalized = false;
+        bool                                    m_restyle_released = false;
 
       public:
         document(document_container* objContainer);
@@ -147,6 +148,21 @@ namespace litehtml
 
         void append_children_from_string(element& parent, const char* str, bool replace_existing);
         void dump(dumper& cout);
+
+        // Static render support. Call after render() and before draw() when the document is rendered once and
+        // never restyled. Frees the state that only a restyle reads: the master, author and user stylesheets,
+        // the media lists, per-element declared properties (html_tag::m_style), matched selectors
+        // (element::m_used_styles), counters, script and style element source text, the tabular element list,
+        // and (unless keep_attributes) attribute maps and class lists. draw() and render() still work. The
+        // ordered list marker index is kept. Afterwards media_changed(), lang_changed() and hover or active
+        // state changes do not restyle, append_children_from_string() does nothing, and get_attr() returns
+        // the default for every attribute except list_index unless keep_attributes was set (so anchor href
+        // lookups on click need keep_attributes). Calling it again does nothing.
+        void release_restyle_state(bool keep_attributes = false);
+        bool restyle_released() const
+        {
+            return m_restyle_released;
+        }
 
         // see doc/document_createFromString.txt
         static document::ptr createFromString(const estring& str, document_container* container,

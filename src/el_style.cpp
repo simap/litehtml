@@ -32,6 +32,12 @@ void litehtml::el_style::compute_styles(bool /* recursive */)
     modify_css([](css_properties& c) { c.set_display(display_none); });
 }
 
+void litehtml::el_style::release_source_text()
+{
+    // the text was copied into the document stylesheet by parse_attributes
+    m_children = elements_list();
+}
+
 litehtml::string_id litehtml::el_style::tag() const
 {
     return _style_;
