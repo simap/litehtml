@@ -39,29 +39,25 @@ namespace litehtml
     {
         position pos;
         bool     is_first = true;
-        for(const auto& ri_el : m_renders)
-        {
-            auto ri = ri_el.lock();
-            if(ri)
+        for_each_render([&](const std::shared_ptr<render_item>& ri) {
+            position ri_pos = ri->get_placement();
+            if(is_first)
             {
-                position ri_pos = ri->get_placement();
-                if(is_first)
+                is_first = false;
+                pos      = ri_pos;
+            } else
+            {
+                if(pos.x < ri_pos.x)
                 {
-                    is_first = false;
-                    pos      = ri_pos;
-                } else
+                    pos.x = ri_pos.x;
+                }
+                if(pos.y < ri_pos.y)
                 {
-                    if(pos.x < ri_pos.x)
-                    {
-                        pos.x = ri_pos.x;
-                    }
-                    if(pos.y < ri_pos.y)
-                    {
-                        pos.y = ri_pos.y;
-                    }
+                    pos.y = ri_pos.y;
                 }
             }
-        }
+            return true;
+        });
         return pos;
     }
 
@@ -204,7 +200,19 @@ namespace litehtml
 
     void element::add_render(const std::shared_ptr<render_item>& ri)
     {
-        m_renders.push_back(ri);
+        // an empty weak_ptr shares no owner with a default-constructed one; an expired one still does
+        const std::weak_ptr<render_item> unset;
+        if(!m_render.owner_before(unset) && !unset.owner_before(m_render))
+        {
+            m_render = ri;
+        } else
+        {
+            if(!m_more_renders)
+            {
+                m_more_renders = std::make_unique<std::vector<std::weak_ptr<render_item>>>();
+            }
+            m_more_renders->push_back(ri);
+        }
     }
 
     bool element::find_styles_changes(const std::function<void(const position&)>& redraw_box)
@@ -219,14 +227,10 @@ namespace litehtml
         if(requires_styles_update())
         {
             auto process_boxes = [&](const std::shared_ptr<element>& el) {
-                for(const auto& weak_ri : el->m_renders)
-                {
-                    auto ri = weak_ri.lock();
-                    if(ri)
-                    {
-                        ri->get_rendering_boxes(redraw_box);
-                    }
-                }
+                el->for_each_render([&](const std::shared_ptr<render_item>& ri) {
+                    ri->get_rendering_boxes(redraw_box);
+                    return true;
+                });
             };
             process_boxes(shared_from_this());
             for(auto& el : m_children)
@@ -434,11 +438,7 @@ namespace litehtml
 
     pixel_t litehtml::element::v_scroll(pixel_t dy) const
     {
-        if(m_renders.empty())
-        {
-            return 0_px;
-        }
-        auto ri_el = m_renders.front().lock();
+        auto ri_el = m_render.lock();
         if(!ri_el)
         {
             return 0_px;
@@ -448,11 +448,7 @@ namespace litehtml
 
     pixel_t litehtml::element::h_scroll(pixel_t dx) const
     {
-        if(m_renders.empty())
-        {
-            return 0_px;
-        }
-        auto ri_el = m_renders.front().lock();
+        auto ri_el = m_render.lock();
         if(!ri_el)
         {
             return 0_px;
@@ -462,17 +458,7 @@ namespace litehtml
 
     void litehtml::element::run_on_renderers(const std::function<bool(const std::shared_ptr<render_item>&)>& func)
     {
-        for(const auto& weak_ri : m_renders)
-        {
-            auto ri = weak_ri.lock();
-            if(ri)
-            {
-                if(!func(ri))
-                {
-                    break;
-                }
-            }
-        }
+        for_each_render(func);
     }
 
     const background* element::get_background(bool /*own_only*/) LITEHTML_RETURN_FUNC(nullptr);

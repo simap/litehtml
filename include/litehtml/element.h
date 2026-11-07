@@ -33,11 +33,39 @@ namespace litehtml
         std::weak_ptr<document>               m_doc;
         elements_list                         m_children;
         const css_properties*                 m_css; // interned, owned by the document (see set_css)
-        std::list<std::weak_ptr<render_item>> m_renders;
+        // render items of this element in creation order: the first inline, later ones (rare) in m_more_renders
+        std::weak_ptr<render_item>                               m_render;
+        std::unique_ptr<std::vector<std::weak_ptr<render_item>>> m_more_renders;
         used_selector::vector                 m_used_styles;
 
         virtual void select_all(const css_selector& selector, elements_list& res);
         element::ptr _add_before_after(int type, const style& style);
+
+        // Calls f(const std::shared_ptr<render_item>&) for every live render item in creation order until f
+        // returns false.
+        template <class F> void for_each_render(F&& f) const
+        {
+            if(auto ri = m_render.lock())
+            {
+                if(!f(ri))
+                {
+                    return;
+                }
+            }
+            if(m_more_renders)
+            {
+                for(const auto& weak_ri : *m_more_renders)
+                {
+                    if(auto ri = weak_ri.lock())
+                    {
+                        if(!f(ri))
+                        {
+                            return;
+                        }
+                    }
+                }
+            }
+        }
 
       private:
         // null until a counter is reset or incremented on this element (few elements have one)
@@ -249,11 +277,7 @@ namespace litehtml
 
     inline std::shared_ptr<render_item> element::get_render_item()
     {
-        if(m_renders.empty())
-        {
-            return nullptr;
-        }
-        return m_renders.front().lock();
+        return m_render.lock();
     }
 } // namespace litehtml
 
