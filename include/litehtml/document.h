@@ -69,6 +69,7 @@ namespace litehtml
         // after m_root and every element that points into it.
         std::unordered_multimap<size_t, std::unique_ptr<const css_properties>> m_computed_styles;
         const css_properties*                                                 m_default_style = nullptr;
+        const css_properties*                                                 m_text_style    = nullptr;
         // Text of el_text and el_space nodes. Declared before m_root for the same reason.
         text_arena m_text_arena;
 
@@ -124,6 +125,9 @@ namespace litehtml
         const css_properties* intern_style(const css_properties& style);
         // Interned default-constructed css_properties (the style of an element before compute).
         const css_properties* default_style();
+        // Interned default style with display inline_text: the style of an el_text or el_space before compute.
+        // Every text node starts from it, so it is interned once per document instead of once per node.
+        const css_properties* text_style();
         size_t                interned_style_count() const
         {
             return m_computed_styles.size();

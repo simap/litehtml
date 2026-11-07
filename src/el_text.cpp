@@ -13,7 +13,8 @@ litehtml::el_text::el_text(const char* text, const document::ptr& doc) :
     m_text        = doc->texts().add(text, strlen(text));
     m_width = 0;
     m_shown = shown_original;
-    modify_css([](css_properties& c) { c.set_display(display_inline_text); });
+    // the default style with display inline_text, interned once per document
+    m_css = doc->text_style();
 }
 
 litehtml::el_text::~el_text()

@@ -758,6 +758,17 @@ namespace litehtml
         return m_default_style;
     }
 
+    const css_properties* document::text_style()
+    {
+        if(!m_text_style)
+        {
+            css_properties c = *default_style();
+            c.set_display(display_inline_text);
+            m_text_style = intern_style(c);
+        }
+        return m_text_style;
+    }
+
     uint_ptr document::get_font(const font_description& descr, font_metrics* fm)
     {
         if(descr.size == 0_px)
