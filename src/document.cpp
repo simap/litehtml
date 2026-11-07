@@ -107,7 +107,8 @@ namespace litehtml
                                                const std::string& user_styles, unsigned static_options)
     {
         LH_PROBE("p0_enter");
-        if(container && !container->check_memory_budget("parse", str.size()))
+        if(container &&
+           !container->check_memory_budget("parse", str.size() * document_container::parse_budget_factor))
         {
             return nullptr;
         }

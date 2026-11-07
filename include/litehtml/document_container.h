@@ -83,8 +83,13 @@ namespace litehtml
         }
         virtual void split_text(const char* text, const std::function<void(const char*)>& on_word,
                                 const std::function<void(const char*)>& on_space);
+        // Engine heap a parse is expected to reach per byte of HTML input. Parsing (gumbo tree, DOM, master
+        // stylesheet, linked stylesheet text) took the engine to 9.9x the HTML size on Wikipedia and 10.1x on
+        // Hackaday on the ESP32-S3 (QEMU, 52903e1) by the time the cascade check runs.
+        static constexpr size_t parse_budget_factor = 10;
         // Memory budget check, called by document::createFromString before each large phase:
-        //   "parse"   before the HTML is parsed; bytes = HTML input size
+        //   "parse"   before the HTML is parsed; bytes = estimated engine heap the parse will reach,
+        //             parse_budget_factor x the HTML input size (the HTML buffer itself is the caller's)
         //   "cascade" DOM built and linked stylesheets loaded, before they are parsed and styles are computed;
         //             bytes = total linked stylesheet source size
         //   "tree"    styles computed, before the render tree is built; bytes = 0
