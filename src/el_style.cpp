@@ -29,7 +29,7 @@ bool litehtml::el_style::appendChild(const ptr& el)
 
 void litehtml::el_style::compute_styles(bool /* recursive */)
 {
-    css().set_display(display_none);
+    modify_css([](css_properties& c) { c.set_display(display_none); });
 }
 
 litehtml::string_id litehtml::el_style::tag() const

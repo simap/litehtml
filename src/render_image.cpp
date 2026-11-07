@@ -21,7 +21,12 @@ litehtml::pixel_t litehtml::render_item_image::_render(pixel_t x, pixel_t y,
     m_pos.width  = sz.width;
     m_pos.height = sz.height;
 
-    src_el()->css().line_height().computed_value = height();
+    // copy-on-write: the image style is shared, so re-intern with the line height set to the image height
+    if(src_el()->css().line_height().computed_value != height())
+    {
+        pixel_t h = height();
+        src_el()->modify_css([h](css_properties& c) { c.line_height().computed_value = h; });
+    }
 
     if(src_el()->css().get_height().is_predefined() && src_el()->css().get_width().is_predefined())
     {

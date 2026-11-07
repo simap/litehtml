@@ -643,7 +643,7 @@ void litehtml::css_properties::snap_border_width(css_length& width, const std::s
     width.set_value(px.value(), css_units_px);
 }
 
-std::vector<std::tuple<std::string, std::string>> litehtml::css_properties::dump_get_attrs()
+std::vector<std::tuple<std::string, std::string>> litehtml::css_properties::dump_get_attrs() const
 {
     std::vector<std::tuple<std::string, std::string>> ret;
 

@@ -139,7 +139,9 @@ void litehtml::table_grid::finish()
         {
             if(cell(col, row)->el && cell(col, row)->colspan == 1)
             {
-                cell(col, row)->el->src_el()->css().set_width(m_columns[col].css_width);
+                // copy-on-write: the cell style is shared, so re-intern with the column width
+                const css_length& w = m_columns[col].css_width;
+                cell(col, row)->el->src_el()->modify_css([&w](css_properties& c) { c.set_width(w); });
             }
         }
     }

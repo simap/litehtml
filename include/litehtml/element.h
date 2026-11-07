@@ -32,7 +32,7 @@ namespace litehtml
         std::weak_ptr<element>                m_parent;
         std::weak_ptr<document>               m_doc;
         elements_list                         m_children;
-        css_properties                        m_css;
+        const css_properties*                 m_css; // interned, owned by the document (see set_css)
         std::list<std::weak_ptr<render_item>> m_renders;
         used_selector::vector                 m_used_styles;
 
@@ -47,7 +47,15 @@ namespace litehtml
         virtual ~element() = default;
 
         const css_properties& css() const;
-        css_properties&       css();
+        // Replaces this element's style with the interned instance equal to style.
+        void set_css(const css_properties& style);
+        // Copy-on-write: copies the current style, applies f to the copy, and interns the result.
+        template <class F> void modify_css(F&& f)
+        {
+            css_properties tmp = *m_css;
+            f(tmp);
+            set_css(tmp);
+        }
 
         bool     in_normal_flow() const;
         bool     is_inline() const;     // returns true if element is inline
@@ -223,12 +231,7 @@ namespace litehtml
 
     inline const css_properties& element::css() const
     {
-        return m_css;
-    }
-
-    inline css_properties& element::css()
-    {
-        return m_css;
+        return *m_css;
     }
 
     inline bool element::is_block_box() const

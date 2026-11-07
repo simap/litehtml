@@ -12,7 +12,7 @@ litehtml::el_text::el_text(const char* text, const document::ptr& doc) :
     }
     m_use_transformed = false;
     m_draw_spaces     = true;
-    css().set_display(display_inline_text);
+    modify_css([](css_properties& c) { c.set_display(display_inline_text); });
 }
 
 void litehtml::el_text::get_content_size(size& sz, pixel_t /*max_width*/)
@@ -27,23 +27,25 @@ void litehtml::el_text::get_text(std::string& text) const
 
 void litehtml::el_text::compute_styles(bool /*recursive*/)
 {
+    // compute into a scratch copy, then share the interned instance
+    css_properties c       = *m_css;
     element::ptr el_parent = parent();
     if(el_parent)
     {
-        css().line_height() = el_parent->css().line_height();
-        css().set_font(el_parent->css().get_font());
-        css().set_font_metrics(el_parent->css().get_font_metrics());
-        css().set_white_space(el_parent->css().get_white_space());
-        css().set_text_transform(el_parent->css().get_text_transform());
+        c.line_height() = el_parent->css().line_height();
+        c.set_font(el_parent->css().get_font());
+        c.set_font_metrics(el_parent->css().get_font_metrics());
+        c.set_white_space(el_parent->css().get_white_space());
+        c.set_text_transform(el_parent->css().get_text_transform());
     }
-    css().set_display(display_inline_text);
-    css().set_float(float_none);
+    c.set_display(display_inline_text);
+    c.set_float(float_none);
 
-    if(m_css.get_text_transform() != text_transform_none)
+    if(c.get_text_transform() != text_transform_none)
     {
         m_transformed_text = m_text;
         m_use_transformed  = true;
-        get_document()->container()->transform_text(m_transformed_text, m_css.get_text_transform());
+        get_document()->container()->transform_text(m_transformed_text, c.get_text_transform());
     } else
     {
         m_use_transformed = false;
@@ -54,16 +56,17 @@ void litehtml::el_text::compute_styles(bool /*recursive*/)
     {
         if(p->css().get_position() == element_position_relative)
         {
-            css().set_offsets(p->css().get_offsets());
-            css().set_position(element_position_relative);
+            c.set_offsets(p->css().get_offsets());
+            c.set_position(element_position_relative);
             break;
         }
         p = p->parent();
     }
     if(p)
     {
-        css().set_position(element_position_static);
+        c.set_position(element_position_static);
     }
+    set_css(c);
 
     if(is_white_space())
     {

@@ -107,7 +107,7 @@ namespace litehtml
       public:
         void compute(const html_tag* el, const std::shared_ptr<document>& doc);
 
-        std::vector<std::tuple<std::string, std::string>> dump_get_attrs();
+        std::vector<std::tuple<std::string, std::string>> dump_get_attrs() const;
 
         // Appends a structural key covering every member (no padding bytes) to out. Two css_properties with
         // equal keys are interchangeable. Used by document::intern_style to share computed styles.
