@@ -40,7 +40,9 @@ namespace litehtml
         element::ptr _add_before_after(int type, const style& style);
 
       private:
-        std::map<string_id, int> m_counter_values;
+        // null until a counter is reset or incremented on this element (few elements have one)
+        std::unique_ptr<std::map<string_id, int>> m_counter_values;
+        std::map<string_id, int>&                 counter_values();
 
       public:
         explicit element(const std::shared_ptr<document>& doc);

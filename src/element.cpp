@@ -309,17 +309,20 @@ namespace litehtml
             element::ptr current = shared_from_this();
             while(current != nullptr)
             {
-                auto map_iterator = current->m_counter_values.find(counter_name_id);
-                if(map_iterator != current->m_counter_values.end())
+                if(current->m_counter_values)
                 {
-                    values.push_back(std::to_string(map_iterator->second));
+                    auto map_iterator = current->m_counter_values->find(counter_name_id);
+                    if(map_iterator != current->m_counter_values->end())
+                    {
+                        values.push_back(std::to_string(map_iterator->second));
+                    }
                 }
                 current = current->parent();
             }
             if(values.empty())
             {
                 // if no counter is found, instance one with value '0'
-                shared_from_this()->m_counter_values[counter_name_id] = 0;
+                counter_values()[counter_name_id] = 0;
                 result                                                = "0";
             } else
             {
@@ -336,10 +339,13 @@ namespace litehtml
 
         while(current != nullptr)
         {
-            map_iterator = current->m_counter_values.find(counter_name_id);
-            if(map_iterator != current->m_counter_values.end())
+            if(current->m_counter_values)
             {
-                return true;
+                map_iterator = current->m_counter_values->find(counter_name_id);
+                if(map_iterator != current->m_counter_values->end())
+                {
+                    return true;
+                }
             }
 
             // on each level, search previous siblings too
@@ -347,10 +353,13 @@ namespace litehtml
             std::reverse(siblings.begin(), siblings.end());
             for(const element::ptr& sibling : siblings)
             {
-                map_iterator = sibling->m_counter_values.find(counter_name_id);
-                if(map_iterator != sibling->m_counter_values.end())
+                if(sibling->m_counter_values)
                 {
-                    return true;
+                    map_iterator = sibling->m_counter_values->find(counter_name_id);
+                    if(map_iterator != sibling->m_counter_values->end())
+                    {
+                        return true;
+                    }
                 }
             }
             current = current->parent();
@@ -405,13 +414,22 @@ namespace litehtml
         } else
         {
             // if counter is not found, initialize one on this element
-            m_counter_values[counter_name_id] = increment;
+            counter_values()[counter_name_id] = increment;
         }
     }
 
     void litehtml::element::reset_counter(const string_id& counter_name_id, int value)
     {
-        m_counter_values[counter_name_id] = value;
+        counter_values()[counter_name_id] = value;
+    }
+
+    std::map<string_id, int>& litehtml::element::counter_values()
+    {
+        if(!m_counter_values)
+        {
+            m_counter_values = std::make_unique<std::map<string_id, int>>();
+        }
+        return *m_counter_values;
     }
 
     pixel_t litehtml::element::v_scroll(pixel_t dy) const
