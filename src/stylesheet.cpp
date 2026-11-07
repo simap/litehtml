@@ -172,8 +172,10 @@ namespace litehtml
         // to its grammar or context, it's a parse error. Discard that rule.
         // Each rule is consumed (css_parser::consume_rule is one step of "consume a list of rules"),
         // interpreted, and dropped before the next one is consumed.
+        // When the input is a token stream, the {} block of an at-rule is left in the stream (block_pending) so that
+        // the contents of @media, @supports and @layer are parsed from the stream without being stored first.
         raw_rule::ptr rule;
-        while(parser.consume_rule(top_level, rule))
+        while(parser.consume_rule(top_level, rule, /*defer_blocks*/ true))
         {
             if(!rule)
             {
@@ -187,6 +189,25 @@ namespace litehtml
                 }
                 continue;
             }
+
+            bool pending   = parser.block_pending();
+            bool has_block = pending || rule->block.type == CURLY_BLOCK;
+            // <stylesheet> block contents, from the stream or from the block's component values
+            auto parse_block = [&](const media_query_list_list::ptr& block_media) {
+                if(pending)
+                {
+                    if(doc && block_media)
+                    {
+                        doc->add_media_list(block_media);
+                    }
+                    int saved = parser.begin_block();
+                    parse_rules(parser, baseurl, doc, block_media, false);
+                    parser.end_block(saved);
+                } else
+                {
+                    parse_css_stylesheet(rule->block.value, baseurl, doc, block_media, false);
+                }
+            };
 
             // Otherwise: at-rule
             switch(_id(lowcase(rule->name)))
@@ -208,7 +229,7 @@ namespace litehtml
             // @media <media-query-list> { <stylesheet> }
             case _media_:
                 {
-                    if(rule->block.type != CURLY_BLOCK)
+                    if(!has_block)
                     {
                         break;
                     }
@@ -221,7 +242,7 @@ namespace litehtml
                         new_media = std::make_shared<media_query_list_list>(media ? *media : media_query_list_list());
                         new_media->add(mq_list);
                     }
-                    parse_css_stylesheet(rule->block.value, baseurl, doc, new_media, false);
+                    parse_block(new_media);
                     import_allowed = false;
                     break;
                 }
@@ -230,14 +251,14 @@ namespace litehtml
             // @supports <supports-condition> { <stylesheet> }
             case _supports_:
                 {
-                    if(rule->block.type != CURLY_BLOCK)
+                    if(!has_block)
                     {
                         break;
                     }
                     auto condition = normalize(rule->prelude, f_componentize);
                     if(eval_supports_condition(condition, doc->container()))
                     {
-                        parse_css_stylesheet(rule->block.value, baseurl, doc, media, false);
+                        parse_block(media);
                     }
                     import_allowed = false;
                     break;
@@ -250,9 +271,9 @@ namespace litehtml
                 {
                     // Cascade layers are not implemented: a layer statement only declares layer order, so it
                     // is ignored, and the rules of a layer block are used as if they were not layered.
-                    if(rule->block.type == CURLY_BLOCK)
+                    if(has_block)
                     {
-                        parse_css_stylesheet(rule->block.value, baseurl, doc, media, false);
+                        parse_block(media);
                         import_allowed = false;
                     }
                     // a layer statement rule is allowed before @import and does not disallow it
@@ -261,6 +282,13 @@ namespace litehtml
 
             default:
                 css_parse_error("unrecognized rule @" + rule->name);
+            }
+
+            // a block that was not parsed above (unrecognized at-rule, false @supports condition, a block after
+            // @import or @charset) is consumed and dropped
+            if(parser.block_pending())
+            {
+                parser.skip_block();
             }
         }
     }

@@ -297,6 +297,12 @@ namespace litehtml
             {
                 m_current = m_tokenizer->next_token();
             }
+            if(m_current.type == '}' && m_depth == m_end_depth)
+            {
+                // end of a nested stylesheet block: EOF for its contents, the '}' stays for end_block
+                m_reconsume = true;
+                return eof_token();
+            }
             return m_current;
         }
         if(m_index == static_cast<int>(m_tokens->size()))
@@ -310,9 +316,9 @@ namespace litehtml
     {
         if(m_tokenizer)
         {
-            next_token();
-            m_reconsume = true;
-            return m_current;
+            const css_token& token = next_token();
+            m_reconsume            = true;
+            return token;
         }
         if(m_index == static_cast<int>(m_tokens->size()))
         {
@@ -350,9 +356,32 @@ namespace litehtml
         return rules;
     }
 
-    bool css_parser::consume_rule(bool top_level, raw_rule::ptr& rule)
+    void css_parser::skip_block()
     {
-        rule = nullptr;
+        m_block_pending = false;
+        consume_simple_block('{');
+    }
+
+    int css_parser::begin_block()
+    {
+        m_block_pending = false;
+        int saved       = m_end_depth;
+        m_depth++;
+        m_end_depth = m_depth;
+        return saved;
+    }
+
+    void css_parser::end_block(int saved)
+    {
+        m_end_depth = saved;
+        next_token(); // the '}' that ended the block contents, or EOF
+        m_depth--;
+    }
+
+    bool css_parser::consume_rule(bool top_level, raw_rule::ptr& rule, bool defer_blocks)
+    {
+        rule            = nullptr;
+        m_block_pending = false;
 
         // Repeatedly consume the next input token:
         switch(next_token().type)
@@ -379,7 +408,7 @@ namespace litehtml
         case AT_KEYWORD:
             // Reconsume the current input token. Consume an at-rule.
             reconsume();
-            rule = consume_at_rule();
+            rule = consume_at_rule(defer_blocks);
             return true;
 
         default:
@@ -426,7 +455,7 @@ namespace litehtml
     }
 
     // https://www.w3.org/TR/css-syntax-3/#consume-at-rule
-    raw_rule::ptr css_parser::consume_at_rule()
+    raw_rule::ptr css_parser::consume_at_rule(bool defer_block)
     {
         // Consume the next input token. Create a new at-rule with its name set to the value of the current input token,
         // its prelude initially set to an empty list, and its value initially set to nothing.
@@ -447,6 +476,11 @@ namespace litehtml
                 return rule;
             case '{':
                 // Consume a simple block and assign it to the at-rule’s block. Return the at-rule.
+                if(defer_block && m_tokenizer)
+                {
+                    m_block_pending = true; // see consume_rule
+                    return rule;
+                }
                 rule->block = consume_simple_block('{');
                 return rule;
             case CURLY_BLOCK:
@@ -474,6 +508,7 @@ namespace litehtml
 
         char closing_bracket = mirror(opening_bracket);
 
+        m_depth++;
         while(true)
         {
             // Repeatedly consume the next input token and process it as follows:
@@ -485,6 +520,7 @@ namespace litehtml
                 {
                     css_parse_error("eof in simple block");
                 }
+                m_depth--;
                 // drop the growth slack; the token copy constructor used to do this implicitly
                 block.value.shrink_to_fit();
                 return block;
@@ -516,9 +552,9 @@ namespace litehtml
 
             // Otherwise, return the current input token.
         default:
-            if(m_tokenizer)
+            if(&token == &m_current)
             {
-                // token is m_current; it is not reconsumed after this, so it can be moved out
+                // stream mode: m_current is not reconsumed after this, so it can be moved out
                 return std::move(m_current);
             }
             return token;
@@ -532,17 +568,20 @@ namespace litehtml
         // set to an empty list.
         css_token function(CV_FUNCTION, name);
 
+        m_depth++;
         while(true)
         {
             // Repeatedly consume the next input token and process it as follows:
             switch(next_token().type)
             {
             case ')':
+                m_depth--;
                 function.value.shrink_to_fit();
                 return function;
 
             case EOF:
                 css_parse_error("eof in function");
+                m_depth--;
                 function.value.shrink_to_fit();
                 return function;
 
