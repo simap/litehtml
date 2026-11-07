@@ -5,9 +5,21 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 
 namespace litehtml
 {
+    // Releases the unused capacity of a std::vector or std::string by moving the elements into an exactly
+    // sized copy. std::vector::shrink_to_fit does nothing in libstdc++ built without exceptions (the
+    // ESP-IDF configuration): __shrink_to_fit_aux returns false when __cpp_exceptions is undefined.
+    template <class C> void shrink_to_fit(C& c)
+    {
+        if(c.capacity() > c.size())
+        {
+            C(std::make_move_iterator(c.begin()), std::make_move_iterator(c.end())).swap(c);
+        }
+    }
+
     const std::string      whitespace = " \n\r\t\f";
     std::string&           trim(std::string& s, const std::string& chars_to_trim = whitespace);
     std::string            trim(const std::string& s, const std::string& chars_to_trim = whitespace);

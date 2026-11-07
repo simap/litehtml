@@ -522,7 +522,7 @@ namespace litehtml
                 }
                 m_depth--;
                 // drop the growth slack; the token copy constructor used to do this implicitly
-                block.value.shrink_to_fit();
+                shrink_to_fit(block.value);
                 return block;
             }
             // Reconsume the current input token. Consume a component value and append it to the value of the block.
@@ -576,13 +576,13 @@ namespace litehtml
             {
             case ')':
                 m_depth--;
-                function.value.shrink_to_fit();
+                shrink_to_fit(function.value);
                 return function;
 
             case EOF:
                 css_parse_error("eof in function");
                 m_depth--;
-                function.value.shrink_to_fit();
+                shrink_to_fit(function.value);
                 return function;
 
             default:

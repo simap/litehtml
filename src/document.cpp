@@ -165,7 +165,7 @@ namespace litehtml
         LH_PROBE("p4_gumbo_destroyed");
         // EXP: the HTML copy is only needed while gumbo output is alive
         doc->m_text.clear();
-        doc->m_text.shrink_to_fit();
+        shrink_to_fit(doc->m_text);
         LH_PROBE("p5_source_freed");
         LH_PHASE("parse");
 
@@ -176,7 +176,7 @@ namespace litehtml
         }
         // EXP: stylesheet source text copies are parsed by now
         doc->m_css.clear();
-        doc->m_css.shrink_to_fit();
+        shrink_to_fit(doc->m_css);
 #ifdef LITEHTML_STATIC_RELEASE_ENV
         if(prune_unrendered)
         {
@@ -499,7 +499,7 @@ namespace litehtml
                 // ...reparse with the new encoding.
                 gumbo_destroy_output(&opts, output);
                 m_text.clear();
-                m_text.shrink_to_fit();
+                shrink_to_fit(m_text);
 
                 input = &str;
                 if(new_encoding != encoding::utf_8)

@@ -156,7 +156,7 @@ namespace litehtml
             size_t val_pos = pos + name.size() + 1;
             size_t val_end = val_pos + strlen(m_attrs.c_str() + val_pos) + 1;
             m_attrs.erase(pos, val_end - pos);
-            m_attrs.shrink_to_fit();
+            litehtml::shrink_to_fit(m_attrs);
         }
         if(name == "class")
         {
@@ -485,8 +485,8 @@ namespace litehtml
         split_space_runs(m_children, computed.get_white_space(), doc, this);
 
         // every stylesheet has been applied by now; drop the push_back slack of the restyle list
-        m_used_styles.shrink_to_fit();
-        m_children.shrink_to_fit();
+        litehtml::shrink_to_fit(m_used_styles);
+        litehtml::shrink_to_fit(m_children);
         // the declared values are no longer needed; keep custom properties for descendants' var()
         m_style.retain_custom_properties();
 
