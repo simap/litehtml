@@ -112,6 +112,15 @@ namespace litehtml
     string_id          _id(const std::string& str);
     const std::string& _s(string_id id);
 
+    // The id table is global and only grows: every tag, attribute, class, id, property and custom property
+    // name of every page parsed so far stays in it. reset_string_ids() drops every id created after static
+    // initialization (the predefined ids above, "" and "*" stay). Call it only when no document, stylesheet,
+    // css_selector or other object holding such an id is alive, for example between two pages of a
+    // one-document-at-a-time renderer. Returns the number of ids dropped.
+    size_t reset_string_ids();
+    // Number of ids in the table.
+    size_t string_id_count();
+
 } // namespace litehtml
 
 #endif // LITEHTML_STRING_ID_H

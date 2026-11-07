@@ -34,6 +34,32 @@ namespace litehtml
 
     const string_id empty_id = _id("");
     const string_id star_id  = _id("*");
+    // ids that exist after static initialization of this file; defined after empty_id and star_id, so it
+    // counts them. No other translation unit creates an id at static initialization.
+    static const size_t static_id_count = array.size();
+
+    size_t reset_string_ids()
+    {
+        lock_guard;
+        if(array.size() <= static_id_count)
+        {
+            return 0;
+        }
+        size_t dropped = array.size() - static_id_count;
+        for(size_t i = static_id_count; i < array.size(); i++)
+        {
+            map.erase(array[i]);
+        }
+        array.resize(static_id_count);
+        array.shrink_to_fit();
+        return dropped;
+    }
+
+    size_t string_id_count()
+    {
+        lock_guard;
+        return array.size();
+    }
 
     string_id _id(const std::string& str)
     {
