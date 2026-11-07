@@ -145,7 +145,28 @@ litehtml::pixel_t litehtml::render_item_inline_context::_render_content(pixel_t 
         }
     }
 
+    store_line_metrics();
+    if(src_el()->css().get_display() != display_table_cell)
+    {
+        release_line_boxes();
+    }
+
     return m_max_line_width;
+}
+
+void litehtml::render_item_inline_context::store_line_metrics()
+{
+    m_has_lines = !m_line_boxes.empty();
+    if(m_has_lines)
+    {
+        m_first_line_baseline = m_line_boxes.front()->bottom() - m_line_boxes.front()->baseline();
+        m_last_line_baseline  = m_line_boxes.back()->bottom() - m_line_boxes.back()->baseline();
+    }
+}
+
+void litehtml::render_item_inline_context::release_line_boxes()
+{
+    std::vector<std::unique_ptr<line_box>>().swap(m_line_boxes);
 }
 
 void litehtml::render_item_inline_context::fix_line_width(element_float flt, const containing_block_context& self_size,
@@ -405,16 +426,17 @@ void litehtml::render_item_inline_context::apply_vertical_align()
                 box->y_shift(add);
             }
         }
+        store_line_metrics();
     }
+    release_line_boxes();
 }
 
 litehtml::pixel_t litehtml::render_item_inline_context::get_first_baseline()
 {
     pixel_t bl;
-    if(!m_line_boxes.empty())
+    if(m_has_lines)
     {
-        const auto& line = m_line_boxes.front();
-        bl               = line->bottom() - line->baseline() + content_offset_top();
+        bl = m_first_line_baseline + content_offset_top();
     } else
     {
         bl = height() - margin_bottom();
@@ -425,10 +447,9 @@ litehtml::pixel_t litehtml::render_item_inline_context::get_first_baseline()
 litehtml::pixel_t litehtml::render_item_inline_context::get_last_baseline()
 {
     pixel_t bl;
-    if(!m_line_boxes.empty())
+    if(m_has_lines)
     {
-        const auto& line = m_line_boxes.back();
-        bl               = line->bottom() - line->baseline() + content_offset_top();
+        bl = m_last_line_baseline + content_offset_top();
     } else
     {
         bl = height();

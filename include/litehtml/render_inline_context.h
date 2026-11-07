@@ -39,6 +39,15 @@ namespace litehtml
       protected:
         std::vector<std::unique_ptr<litehtml::line_box>> m_line_boxes;
         pixel_t                                          m_max_line_width;
+        // Line metrics kept after the line boxes are freed (see release_line_boxes)
+        pixel_t m_first_line_baseline = 0_px; // bottom() - baseline() of the first line box
+        pixel_t m_last_line_baseline  = 0_px; // bottom() - baseline() of the last line box
+        bool    m_has_lines           = false;
+
+        // Store the line metrics that are read after layout (baselines), then free the line boxes and their items.
+        // Draw does not read line boxes. Table cells keep them until apply_vertical_align has run.
+        void store_line_metrics();
+        void release_line_boxes();
 
         void    calc_intrinsic_size() override;
         pixel_t _render_content(pixel_t x, pixel_t y, bool second_pass, const containing_block_context& self_size,
