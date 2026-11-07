@@ -36,7 +36,6 @@ namespace litehtml
         // render items of this element in creation order: the first inline, later ones (rare) in m_more_renders
         std::weak_ptr<render_item>                               m_render;
         std::unique_ptr<std::vector<std::weak_ptr<render_item>>> m_more_renders;
-        used_selector::vector                 m_used_styles;
 
         virtual void select_all(const css_selector& selector, elements_list& res);
         element::ptr _add_before_after(int type, const style& style);
@@ -182,8 +181,9 @@ namespace litehtml
         std::tuple<element::ptr, element::ptr, element::ptr> split_inlines();
         virtual std::shared_ptr<render_item> create_render_item(const std::shared_ptr<render_item>& parent_ri);
 
-        bool requires_styles_update();
-        void add_render(const std::shared_ptr<render_item>& ri);
+        // true if a selector this element matched (or did not) changes result, see html_tag::m_used_styles
+        virtual bool requires_styles_update();
+        void         add_render(const std::shared_ptr<render_item>& ri);
         bool find_styles_changes(const std::function<void(const position&)>& redraw_box);
 
         element::ptr add_pseudo_before(const style& style)

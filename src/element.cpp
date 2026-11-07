@@ -182,7 +182,9 @@ namespace litehtml
         return ret;
     }
 
-    bool element::requires_styles_update()
+    bool element::requires_styles_update() LITEHTML_RETURN_FUNC(false);
+
+    bool html_tag::requires_styles_update()
     {
         for(const auto& used_style : m_used_styles)
         {

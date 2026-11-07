@@ -30,6 +30,8 @@ namespace litehtml
         // all attributes packed into one string as name\0value\0name\0value\0... (a tag has few attributes)
         std::string            m_attrs;
         std::vector<string_id> m_pseudo_classes;
+        // selectors this tag matched, kept for restyle (hover, media change); text nodes never have any
+        used_selector::vector m_used_styles;
 
         void select_all(const css_selector& selector, elements_list& res) override;
         // offset of the attribute's name in m_attrs, or std::string::npos
@@ -82,6 +84,7 @@ namespace litehtml
         bool set_pseudo_class(string_id cls, bool add) override;
         bool set_class(const char* pclass, bool add) override;
         bool is_replaced() const override;
+        bool requires_styles_update() override;
         void compute_styles(bool recursive = true) override;
         void draw(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip,
                   const std::shared_ptr<render_item>& ri) override;
