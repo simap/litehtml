@@ -9,14 +9,32 @@ namespace litehtml
     class el_text : public element
     {
       protected:
-        std::string m_text;
-        std::string m_transformed_text;
+        // Which string is measured and drawn (see shown_text).
+        enum shown_kind : uint8_t
+        {
+            shown_original,    // m_text
+            shown_space,       // " ": collapsible white space
+            shown_tab,         // four spaces: a tab that is not collapsed
+            shown_empty,       // "": a newline or carriage return that is not collapsed
+            shown_transformed, // text-transform result, stored in the text arena after the NUL of m_text
+        };
+
+        // NUL-terminated text in the document's text_arena. Lives as long as the document.
+        const char* m_text;
         size        m_size;
-        bool        m_use_transformed;
+        uint8_t     m_shown;
         bool        m_draw_spaces;
 
       public:
         el_text(const char* text, const document::ptr& doc);
+
+        // The text as parsed.
+        const char* text() const
+        {
+            return m_text;
+        }
+        // The string that is measured and drawn.
+        const char* shown_text() const;
 
         void get_text(std::string& text) const override;
         void compute_styles(bool recursive) override;

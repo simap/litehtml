@@ -6,6 +6,7 @@
 #include "encodings.h"
 #include "font_description.h"
 #include "master_css.h"
+#include "text_arena.h"
 #include "types.h"
 
 #include <functional>
@@ -60,6 +61,8 @@ namespace litehtml
         // after m_root and every element that points into it.
         std::unordered_multimap<size_t, std::unique_ptr<const css_properties>> m_computed_styles;
         const css_properties*                                                 m_default_style = nullptr;
+        // Text of el_text and el_space nodes. Declared before m_root for the same reason.
+        text_arena m_text_arena;
 
         std::shared_ptr<element>                m_root;
         std::shared_ptr<render_item>            m_root_render;
@@ -94,6 +97,10 @@ namespace litehtml
         document_mode mode() const
         {
             return m_mode;
+        }
+        text_arena& texts()
+        {
+            return m_text_arena;
         }
         uint_ptr  get_font(const font_description& descr, font_metrics* fm);
 
