@@ -366,6 +366,64 @@ namespace litehtml
     {
         std::sort(m_selectors.begin(), m_selectors.end(),
                   [](const css_selector::ptr& v1, const css_selector::ptr& v2) { return (*v1) < (*v2); });
+
+        m_index.clear();
+        m_index.reserve(m_selectors.size());
+        for(int i = 0; i < static_cast<int>(m_selectors.size()); i++)
+        {
+            const css_element_selector& r   = m_selectors[i]->m_right;
+            uint32_t                    key = index_key(3, empty_id);
+            const auto id = std::find_if(r.m_attrs.begin(), r.m_attrs.end(), [](const css_attribute_selector& a) {
+                return a.type == select_id;
+            });
+            const auto cls = std::find_if(r.m_attrs.begin(), r.m_attrs.end(), [](const css_attribute_selector& a) {
+                return a.type == select_class;
+            });
+            if(id != r.m_attrs.end())
+            {
+                key = index_key(0, id->name);
+            } else if(cls != r.m_attrs.end())
+            {
+                key = index_key(1, cls->name);
+            } else if(r.m_tag != star_id)
+            {
+                key = index_key(2, r.m_tag);
+            }
+            m_index.push_back({key, i});
+        }
+        std::sort(m_index.begin(), m_index.end());
+        m_indexed_count = m_selectors.size();
+    }
+
+    bool css::candidates(string_id id, const std::vector<string_id>& classes, string_id tag,
+                         std::vector<int>& out) const
+    {
+        if(m_indexed_count != m_selectors.size())
+        {
+            return false;
+        }
+        auto add = [&](uint32_t key) {
+            auto it = std::lower_bound(m_index.begin(), m_index.end(), index_entry{key, -1});
+            for(; it != m_index.end() && it->key == key; ++it)
+            {
+                out.push_back(it->pos);
+            }
+        };
+        if(id != empty_id)
+        {
+            add(index_key(0, id));
+        }
+        for(string_id cls : classes)
+        {
+            add(index_key(1, cls));
+        }
+        add(index_key(2, tag));
+        add(index_key(3, empty_id));
+        // the lists are each ascending; merge them back into stylesheet order (a repeated class adds a
+        // list twice)
+        std::sort(out.begin(), out.end());
+        out.erase(std::unique(out.begin(), out.end()), out.end());
+        return true;
     }
 
 } // namespace litehtml
