@@ -11,8 +11,8 @@ litehtml::el_text::el_text(const char* text, const document::ptr& doc) :
         text = "";
     }
     m_text        = doc->texts().add(text, strlen(text));
-    m_shown       = shown_original;
-    m_draw_spaces = true;
+    m_width = 0;
+    m_shown = shown_original;
     modify_css([](css_properties& c) { c.set_display(display_inline_text); });
 }
 
@@ -35,7 +35,8 @@ const char* litehtml::el_text::shown_text() const
 
 void litehtml::el_text::get_content_size(size& sz, pixel_t /*max_width*/)
 {
-    sz = m_size;
+    sz.width  = m_width;
+    sz.height = has_size() ? css().get_font_metrics().height : pixel_t(0);
 }
 
 void litehtml::el_text::get_text(std::string& text) const
@@ -103,29 +104,26 @@ void litehtml::el_text::compute_styles(bool /*recursive*/)
         m_shown = shown_original;
     }
 
-    font_metrics fm;
-    uint_ptr     font = 0;
-    if(el_parent)
+    // css() now holds the parent's font and font metrics; get_content_size and draw read the height and
+    // draw_spaces from there
+    if(has_size())
     {
-        font = el_parent->css().get_font();
-        fm   = el_parent->css().get_font_metrics();
-    }
-    if(is_break() || !font)
-    {
-        m_size.height = 0;
-        m_size.width  = 0;
+        m_width = get_document()->container()->text_width(shown_text(), css().get_font());
     } else
     {
-        m_size.height = fm.height;
-        m_size.width  = get_document()->container()->text_width(shown_text(), font);
+        m_width = 0;
     }
-    m_draw_spaces = fm.draw_spaces;
+}
+
+bool litehtml::el_text::has_size() const
+{
+    return !is_break() && css().get_font();
 }
 
 void litehtml::el_text::draw(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip,
                              const std::shared_ptr<render_item>& ri)
 {
-    if(is_white_space() && !m_draw_spaces)
+    if(is_white_space() && !css().get_font_metrics().draw_spaces)
     {
         return;
     }

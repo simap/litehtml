@@ -21,9 +21,13 @@ namespace litehtml
 
         // NUL-terminated text in the document's text_arena. Lives as long as the document.
         const char* m_text;
-        size        m_size;
-        uint8_t     m_shown;
-        bool        m_draw_spaces;
+        // Width of the shown text. The height and draw_spaces come from css().get_font_metrics(), which
+        // compute_styles copies from the parent.
+        pixel_t m_width;
+        uint8_t m_shown;
+
+        // false for a break or a node without a font: zero content size
+        bool has_size() const;
 
       public:
         el_text(const char* text, const document::ptr& doc);
