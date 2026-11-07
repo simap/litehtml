@@ -34,7 +34,9 @@ namespace litehtml
     {
       protected:
         std::shared_ptr<element>                  m_element;
-        std::weak_ptr<render_item>                m_parent;
+        // Not owning. The parent owns this item through its children list, so it outlives it while the item is in
+        // the tree. Items dropped from the tree in init() are not used afterwards.
+        render_item*                              m_parent = nullptr;
         render_item_list                          m_children;
         std::unique_ptr<render_item_extra>        m_extra;
 
@@ -358,7 +360,7 @@ namespace litehtml
 
         std::shared_ptr<render_item> parent() const
         {
-            return m_parent.lock();
+            return m_parent ? m_parent->shared_from_this() : nullptr;
         }
 
         const margins& get_margins() const
@@ -526,7 +528,7 @@ namespace litehtml
 
         void parent(const std::shared_ptr<render_item>& par)
         {
-            m_parent = par;
+            m_parent = par.get();
         }
 
         const std::shared_ptr<element>& src_el() const
@@ -547,7 +549,7 @@ namespace litehtml
 
         bool is_root() const
         {
-            return m_parent.expired();
+            return m_parent == nullptr;
         }
 
         bool collapse_top_margin() const
