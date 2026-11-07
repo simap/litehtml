@@ -16,6 +16,14 @@ namespace litehtml
 
         std::string dump_get_name() override;
     };
+
+    // Whitespace-only text is parsed as one el_space per run (document::create_node). Where ws preserves
+    // white space (pre, pre-wrap, pre-line), replace each run in list by one el_space per character, as
+    // upstream parsed it, so newlines break lines (is_break) and tabs and spaces stay apart. parent, if
+    // not null, becomes the parent of the new nodes (a raw pointer because html_tag can compute its
+    // style inside its constructor, where shared_from_this is not yet available; it has no children then).
+    void split_space_runs(elements_list& list, white_space ws, const std::shared_ptr<document>& doc,
+                          element* parent);
 } // namespace litehtml
 
 #endif // LITEHTML_EL_SPACE_H

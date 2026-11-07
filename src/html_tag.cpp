@@ -5,6 +5,7 @@
 #include "html.h"
 #include "document.h"
 #include "document_container.h"
+#include "el_space.h"
 #include "html_microsyntaxes.h"
 #include "html_tag.h"
 #include "internal.h"
@@ -472,6 +473,8 @@ namespace litehtml
         css_properties computed = *m_css;
         computed.compute(this, doc);
         set_css(computed);
+        // whitespace runs parsed as one el_space become one el_space per character where preserved
+        split_space_runs(m_children, computed.get_white_space(), doc, this);
 
         // every stylesheet has been applied by now; drop the push_back slack of the restyle list
         m_used_styles.shrink_to_fit();

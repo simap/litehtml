@@ -14,7 +14,8 @@
 #include <unordered_map>
 #include <vector>
 
-using GumboOutput = struct GumboInternalOutput;
+using GumboOutput  = struct GumboInternalOutput;
+using GumboOptions = struct GumboInternalOptions;
 
 namespace litehtml
 {
@@ -190,6 +191,16 @@ namespace litehtml
                                               const std::string& master_styles  = litehtml::master_css,
                                               const std::string& user_styles    = {},
                                               unsigned           static_options = 0);
+        // Same as estring(str) without copying str into a temporary estring. Gumbo parses straight out
+        // of str unless the input has to be decoded, so str must not change during the call.
+        static document::ptr createFromString(const std::string& str, document_container* container,
+                                              const std::string& master_styles  = litehtml::master_css,
+                                              const std::string& user_styles    = {},
+                                              unsigned           static_options = 0);
+        static document::ptr createFromString(const char* str, document_container* container,
+                                              const std::string& master_styles  = litehtml::master_css,
+                                              const std::string& user_styles    = {},
+                                              unsigned           static_options = 0);
 
         // Static render support, off by default. Set before finalization (createFromString does it from its
         // argument). Runs release_restyle_state(true) as soon as styles are computed, before the render tree
@@ -235,8 +246,14 @@ namespace litehtml
       private:
         uint_ptr add_font(const font_description& descr, font_metrics* fm);
 
-        GumboOutput* parse_html(estring str);
-        void         create_node(void* gnode, elements_list& elements, bool parseTextNode, bool process_root);
+        static document::ptr create_from_string(const std::string& str, encoding enc, confidence conf,
+                                                document_container* container, const std::string& master_styles,
+                                                const std::string& user_styles, unsigned static_options);
+        GumboOutput*         parse_html(const std::string& str, encoding enc, confidence conf);
+        // Converts gnode's subtree and releases each converted child subtree from the gumbo tree as it
+        // goes, so the two trees never coexist in full. gnode itself stays for its parent to release.
+        void         create_node(void* gnode, elements_list& elements, bool parseTextNode, bool process_root,
+                                 const GumboOptions& gumbo_options);
         bool         update_media_lists(const media_features& features);
         void         fix_tables_layout();
         static size_t subtree_size(const element& el);

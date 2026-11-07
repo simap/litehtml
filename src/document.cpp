@@ -40,8 +40,25 @@ void (*litehtml_static_phase_hook)(const char* phase) = nullptr;
 #define LH_PHASE(name)
 #endif
 
+// Parse-phase measurement probes. Compiled out unless LH_PARSE_PROBE is defined; the measurement
+// build links a litehtml_parse_probe() that snapshots the heap tracer (harness/lanes/parse-transient).
+#ifdef LH_PARSE_PROBE
+extern "C" void litehtml_parse_probe(const char* stage);
+#define LH_PROBE(stage) litehtml_parse_probe(stage)
+#else
+#define LH_PROBE(stage) ((void) 0)
+#endif
+
 namespace litehtml
 {
+    // Gumbo records every parse error by default (max_errors -1): a GumboError plus a copy of the
+    // open element stack each. litehtml never reads output->errors, so record none.
+    static GumboOptions gumbo_parse_options()
+    {
+        GumboOptions opts = kGumboDefaultOptions;
+        opts.max_errors   = 0;
+        return opts;
+    }
 
     document::document(document_container* container)
     {
@@ -64,6 +81,32 @@ namespace litehtml
                                              const std::string& master_styles, const std::string& user_styles,
                                              unsigned static_options)
     {
+        return create_from_string(str, str.encoding, str.confidence, container, master_styles, user_styles,
+                                  static_options);
+    }
+
+    // estring(const std::string&) and estring(const char*) both mean encoding null, confidence certain
+    document::ptr document::createFromString(const std::string& str, document_container* container,
+                                             const std::string& master_styles, const std::string& user_styles,
+                                             unsigned static_options)
+    {
+        return create_from_string(str, encoding::null, confidence::certain, container, master_styles, user_styles,
+                                  static_options);
+    }
+
+    document::ptr document::createFromString(const char* str, document_container* container,
+                                             const std::string& master_styles, const std::string& user_styles,
+                                             unsigned static_options)
+    {
+        return create_from_string(std::string(str), encoding::null, confidence::certain, container, master_styles,
+                                  user_styles, static_options);
+    }
+
+    document::ptr document::create_from_string(const std::string& str, encoding enc, confidence conf,
+                                               document_container* container, const std::string& master_styles,
+                                               const std::string& user_styles, unsigned static_options)
+    {
+        LH_PROBE("p0_enter");
         // Create litehtml::document
         document::ptr doc = std::make_shared<document>(container);
 #ifdef LITEHTML_STATIC_RELEASE_ENV
@@ -84,8 +127,9 @@ namespace litehtml
         doc->m_prune_unrendered      = prune_unrendered;
         doc->m_release_after_cascade = (static_options & static_release_after_cascade) != 0;
 
-        // Parse document into GumboOutput
-        GumboOutput* output = doc->parse_html(str);
+        // Parse document into GumboOutput. Gumbo keeps pointers into its input, which is str or the
+        // decoded copy in m_text; both live until the output is destroyed below.
+        GumboOutput* output = doc->parse_html(str, enc, conf);
 
         // mode must be set before doc->create_node because it is used in html_tag::set_attr
         switch(output->document->v.document.doc_type_quirks_mode)
@@ -101,20 +145,24 @@ namespace litehtml
             break;
         }
 
-        // Create litehtml::elements.
+        // Create litehtml::elements. This releases the gumbo subtrees below the root as it converts them.
+        GumboOptions  opts = gumbo_parse_options();
         elements_list root_elements;
-        doc->create_node(output->root, root_elements, true, true);
+        doc->create_node(output->root, root_elements, true, true, opts);
         element::ptr root;
         if(!root_elements.empty())
         {
             root = root_elements.back();
         }
+        LH_PROBE("p3_create_node");
 
-        // Destroy GumboOutput
-        gumbo_destroy_output(&kGumboDefaultOptions, output);
+        // Destroy GumboOutput: the document and root nodes and anything outside the root
+        gumbo_destroy_output(&opts, output);
+        LH_PROBE("p4_gumbo_destroyed");
         // EXP: the HTML copy is only needed while gumbo output is alive
         doc->m_text.clear();
         doc->m_text.shrink_to_fit();
+        LH_PROBE("p5_source_freed");
         LH_PHASE("parse");
 
         doc->finalize_from_external_root(root, master_styles, user_styles);
@@ -128,6 +176,7 @@ namespace litehtml
                     doc->m_pruned_after_init, doc->m_pruned_before_render + doc->m_pruned_after_init);
         }
 #endif
+        LH_PROBE("p6_styles_computed");
 
         return doc;
     }
@@ -384,27 +433,30 @@ namespace litehtml
     }
 
     // substitute for gumbo_parse that handles encodings
-    GumboOutput* document::parse_html(estring str)
+    GumboOutput* document::parse_html(const std::string& str, encoding enc, confidence conf)
     {
         // https://html.spec.whatwg.org/multipage/parsing.html#the-input-byte-stream
-        encoding_sniffing_algorithm(str);
-        // cannot store output in local variable because gumbo keeps pointers into it,
-        // which will be accessed later in gumbo_tag_from_original_text
-        if(str.encoding == encoding::utf_8)
+        encoding_sniffing_algorithm(str, enc, conf);
+        // Gumbo keeps pointers into its input (read later in gumbo_tag_from_original_text), so the input
+        // must outlive the output: UTF-8 is parsed in place from the caller's string, which lives until
+        // createFromString returns; anything else is decoded into m_text.
+        const std::string* input = &str;
+        if(enc != encoding::utf_8)
         {
-            m_text = str;
-        } else
-        {
-            decode(str, str.encoding, m_text);
+            decode(str, enc, m_text);
+            input = &m_text;
         }
 
         // Gumbo does not support callbacks on node creation, so we cannot change encoding while parsing.
         // Instead, we parse entire file and then handle <meta> tags.
 
-        // Using gumbo_parse_with_options to pass string length (m_text may contain NUL chars).
-        GumboOutput* output = gumbo_parse_with_options(&kGumboDefaultOptions, m_text.data(), m_text.size());
+        // Using gumbo_parse_with_options to pass string length (the input may contain NUL chars).
+        LH_PROBE("p1_before_gumbo");
+        GumboOptions opts   = gumbo_parse_options();
+        GumboOutput* output = gumbo_parse_with_options(&opts, input->data(), input->size());
+        LH_PROBE("p2_gumbo_parsed");
 
-        if(str.confidence == confidence::certain)
+        if(conf == confidence::certain)
         {
             return output;
         }
@@ -416,28 +468,29 @@ namespace litehtml
         if(meta_encoding != encoding::null)
         {
             // ...and it is different from currently used encoding...
-            encoding new_encoding = adjust_meta_encoding(meta_encoding, str.encoding);
-            if(new_encoding != str.encoding)
+            encoding new_encoding = adjust_meta_encoding(meta_encoding, enc);
+            if(new_encoding != enc)
             {
                 // ...reparse with the new encoding.
-                gumbo_destroy_output(&kGumboDefaultOptions, output);
+                gumbo_destroy_output(&opts, output);
                 m_text.clear();
+                m_text.shrink_to_fit();
 
-                if(new_encoding == encoding::utf_8)
-                {
-                    m_text = str;
-                } else
+                input = &str;
+                if(new_encoding != encoding::utf_8)
                 {
                     decode(str, new_encoding, m_text);
+                    input = &m_text;
                 }
-                output = gumbo_parse_with_options(&kGumboDefaultOptions, m_text.data(), m_text.size());
+                output = gumbo_parse_with_options(&opts, input->data(), input->size());
             }
         }
 
         return output;
     }
 
-    void document::create_node(void* gnode, elements_list& elements, bool parseTextNode, bool process_root)
+    void document::create_node(void* gnode, elements_list& elements, bool parseTextNode, bool process_root,
+                               const GumboOptions& gumbo_options)
     {
         auto* node = static_cast<GumboNode*>(gnode);
         switch(node->type)
@@ -446,27 +499,29 @@ namespace litehtml
             {
                 if(process_root)
                 {
-                    string_map      attrs;
-                    GumboAttribute* attr = nullptr;
-                    for(unsigned int i = 0; i < node->v.element.attributes.length; i++)
-                    {
-                        attr              = static_cast<GumboAttribute*>(node->v.element.attributes.data[i]);
-                        attrs[attr->name] = attr->value;
-                    }
-
                     element::ptr ret;
                     const char*  tag = gumbo_normalized_tagname(node->v.element.tag);
-                    if(tag[0])
                     {
-                        ret = create_element(tag, attrs);
-                    } else
-                    {
-                        if(node->v.element.original_tag.data && node->v.element.original_tag.length)
+                        // a transient copy for create_element (and the container); it is gone before the
+                        // subtree is converted, instead of living on every level of the recursion
+                        string_map attrs;
+                        for(unsigned int i = 0; i < node->v.element.attributes.length; i++)
                         {
-                            std::string str;
-                            gumbo_tag_from_original_text(&node->v.element.original_tag);
-                            str.append(node->v.element.original_tag.data, node->v.element.original_tag.length);
-                            ret = create_element(str.c_str(), attrs);
+                            auto* attr        = static_cast<GumboAttribute*>(node->v.element.attributes.data[i]);
+                            attrs[attr->name] = attr->value;
+                        }
+                        if(tag[0])
+                        {
+                            ret = create_element(tag, attrs);
+                        } else
+                        {
+                            if(node->v.element.original_tag.data && node->v.element.original_tag.length)
+                            {
+                                std::string str;
+                                gumbo_tag_from_original_text(&node->v.element.original_tag);
+                                str.append(node->v.element.original_tag.data, node->v.element.original_tag.length);
+                                ret = create_element(str.c_str(), attrs);
+                            }
                         }
                     }
                     if(!strcmp(tag, "script") || !strcmp(tag, "style")) // EXP: style text as one node
@@ -479,20 +534,25 @@ namespace litehtml
                         for(unsigned int i = 0; i < node->v.element.children.length; i++)
                         {
                             child.clear();
-                            create_node(static_cast<GumboNode*>(node->v.element.children.data[i]), child, parseTextNode,
-                                        true);
+                            auto* gchild = static_cast<GumboNode*>(node->v.element.children.data[i]);
+                            create_node(gchild, child, parseTextNode, true, gumbo_options);
+                            gumbo_destroy_node(&gumbo_options, gchild);
                             std::for_each(child.begin(), child.end(),
                                           [&ret](element::ptr& el) { ret->appendChild(el); });
                         }
+                        // every child is released; the node itself is released by its parent
+                        node->v.element.children.length = 0;
                         elements.push_back(ret);
                     }
                 } else
                 {
                     for(unsigned int i = 0; i < node->v.element.children.length; i++)
                     {
-                        create_node(static_cast<GumboNode*>(node->v.element.children.data[i]), elements, parseTextNode,
-                                    true);
+                        auto* gchild = static_cast<GumboNode*>(node->v.element.children.data[i]);
+                        create_node(gchild, elements, parseTextNode, true, gumbo_options);
+                        gumbo_destroy_node(&gumbo_options, gchild);
                     }
+                    node->v.element.children.length = 0;
                 }
             }
             break;
@@ -530,7 +590,7 @@ namespace litehtml
             break;
         case GUMBO_NODE_WHITESPACE:
             {
-                std::string str = node->v.text.text;
+                const char* str = node->v.text.text;
                 // EXP: one el_space per whitespace-only node, except where newlines can matter
                 const GumboNode* par = node->parent;
                 bool keep = par && par->type == GUMBO_NODE_ELEMENT &&
@@ -538,11 +598,12 @@ namespace litehtml
                              par->v.element.tag == GUMBO_TAG_LISTING || par->v.element.tag == GUMBO_TAG_PLAINTEXT);
                 if(!keep)
                 {
-                    elements.push_back(std::make_shared<el_space>(str.c_str(), shared_from_this()));
+                    elements.push_back(std::make_shared<el_space>(str, shared_from_this()));
                 } else
-                    for(size_t i = 0; i < str.length(); i++)
+                    for(; *str; str++)
                     {
-                        elements.push_back(std::make_shared<el_space>(str.substr(i, 1).c_str(), shared_from_this()));
+                        const char ch[2] = {*str, 0};
+                        elements.push_back(std::make_shared<el_space>(ch, shared_from_this()));
                     }
             }
             break;
@@ -1372,7 +1433,7 @@ namespace litehtml
             return;
         }
 
-        GumboOptions opts = kGumboDefaultOptions;
+        GumboOptions opts = gumbo_parse_options();
         // This is require to prevent creating html, head, body tags around the fragment
         // Although Gumbo always creates html tag anyway. We have to ignore it in create_node.
         opts.fragment_context = GUMBO_TAG_BODY;
@@ -1382,10 +1443,10 @@ namespace litehtml
         // Create litehtml::elements.
         elements_list child_elements;
         // Create elements excluding the root node
-        create_node(output->root, child_elements, true, false);
+        create_node(output->root, child_elements, true, false, opts);
 
         // Destroy GumboOutput
-        gumbo_destroy_output(&kGumboDefaultOptions, output);
+        gumbo_destroy_output(&opts, output);
 
         auto parent_render = parent.get_render_item();
 
@@ -1394,6 +1455,10 @@ namespace litehtml
             parent.clearRecursive();
             parent_render->children().clear();
         }
+
+        // parent is computed already, so split its new whitespace runs here (html_tag::compute_styles does it
+        // for every other level)
+        split_space_runs(child_elements, parent.css().get_white_space(), shared_from_this(), nullptr);
 
         // Let's process created elements tree
         for(const auto& child : child_elements)
