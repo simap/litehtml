@@ -249,6 +249,37 @@ namespace litehtml
 
     void litehtml::html_tag::apply_stylesheet(const litehtml::css& stylesheet)
     {
+        apply_selectors(stylesheet);
+
+        for(auto& el : m_children)
+        {
+            if(el->css().get_display() != display_inline_text)
+            {
+                el->apply_stylesheet(stylesheet);
+            }
+        }
+    }
+
+    void litehtml::html_tag::apply_stylesheets_and_compute(const litehtml::css& author, const litehtml::css& user)
+    {
+        apply_selectors(author);
+        apply_selectors(user);
+        compute_styles(false);
+
+        for(auto& el : m_children)
+        {
+            if(el->css().get_display() != display_inline_text)
+            {
+                el->apply_stylesheets_and_compute(author, user);
+            } else
+            {
+                el->compute_styles();
+            }
+        }
+    }
+
+    void litehtml::html_tag::apply_selectors(const litehtml::css& stylesheet)
+    {
         for(const auto& sel : stylesheet.selectors())
         {
             // optimization
@@ -337,14 +368,6 @@ namespace litehtml
                     }
                 }
                 m_used_styles.emplace_back(sel.get(), used);
-            }
-        }
-
-        for(auto& el : m_children)
-        {
-            if(el->css().get_display() != display_inline_text)
-            {
-                el->apply_stylesheet(stylesheet);
             }
         }
     }

@@ -70,6 +70,7 @@ namespace litehtml
         void        remove_attr(const char* name) override;
         const char* get_attr(const char* name, const char* def = nullptr) const override;
         void        apply_stylesheet(const litehtml::css& stylesheet) override;
+        void        apply_stylesheets_and_compute(const litehtml::css& author, const litehtml::css& user) override;
         void        refresh_styles() override;
 
         bool is_white_space() const override;
@@ -146,6 +147,8 @@ namespace litehtml
 
       private:
         void handle_counter_properties();
+        // matches the stylesheet against this tag only (apply_stylesheet without the recursion)
+        void apply_selectors(const litehtml::css& stylesheet);
     };
 
     /************************************************************************/

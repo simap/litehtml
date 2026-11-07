@@ -130,6 +130,11 @@ namespace litehtml
         virtual void        remove_attr(const char* name);
         virtual const char* get_attr(const char* name, const char* def = nullptr) const;
         virtual void        apply_stylesheet(const litehtml::css& stylesheet);
+        // For each element in document order: apply author, apply user, compute the style. Same result as
+        // apply_stylesheet(author) and apply_stylesheet(user) over the tree followed by compute_styles(), as long
+        // as the user stylesheet has no counter properties, but an element's full declared style only lives until
+        // its own compute instead of until the whole tree is styled.
+        virtual void apply_stylesheets_and_compute(const litehtml::css& author, const litehtml::css& user);
         virtual void        refresh_styles();
         virtual bool        is_white_space() const;
         virtual bool        is_space() const;

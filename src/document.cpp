@@ -156,14 +156,8 @@ namespace litehtml
             // Apply media features.
             update_media_lists(m_media);
 
-            // Apply parsed styles.
-            m_root->apply_stylesheet(m_styles);
-
-            // Apply user styles if any
-            m_root->apply_stylesheet(m_user_css);
-
-            // Initialize element::m_css
-            m_root->compute_styles();
+            // Apply parsed styles and user styles if any, and initialize element::m_css, one element at a time
+            m_root->apply_stylesheets_and_compute(m_styles, m_user_css);
 
             // Create rendering tree
             m_root_render = m_root->create_render_item(nullptr);
@@ -1219,14 +1213,8 @@ namespace litehtml
             // parse elements attributes
             child->parse_attributes();
 
-            // Apply parsed styles.
-            child->apply_stylesheet(m_styles);
-
-            // Apply user styles if any
-            child->apply_stylesheet(m_user_css);
-
-            // Initialize m_css
-            child->compute_styles();
+            // Apply parsed styles and user styles if any, and initialize m_css, one element at a time
+            child->apply_stylesheets_and_compute(m_styles, m_user_css);
 
             // Finally initialize elements
             if(parent_render)

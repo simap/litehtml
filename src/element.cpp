@@ -184,6 +184,13 @@ namespace litehtml
 
     bool element::requires_styles_update() LITEHTML_RETURN_FUNC(false);
 
+    void element::apply_stylesheets_and_compute(const litehtml::css& author, const litehtml::css& user)
+    {
+        apply_stylesheet(author);
+        apply_stylesheet(user);
+        compute_styles();
+    }
+
     bool html_tag::requires_styles_update()
     {
         for(const auto& used_style : m_used_styles)
