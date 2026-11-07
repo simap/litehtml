@@ -1117,6 +1117,10 @@ namespace litehtml
             // just changed; otherwise a newly-shown element keeps no render item and
             // never lays out (it collapses to zero).
             m_root_render = m_root->create_render_item(nullptr);
+            // create_render_item filled the tabular list, and fix_tables_layout (which clears it) is not called
+            // here. Kept, it would hold this tree's tabular items alive after the next rebuild, orphaned, and
+            // render_item::parent() on an orphan whose parent is gone throws bad_weak_ptr.
+            m_tabular_elements.clear();
             if(m_root_render)
             {
                 m_root_render = m_root_render->init();
