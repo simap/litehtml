@@ -1029,6 +1029,9 @@ namespace litehtml
                 break;
             }
         }
+        // The list is only read above. Keeping it would hold every tabular render item from create_render_item
+        // alive for the life of the document, including the table cell items that init() replaces.
+        m_tabular_elements.clear();
     }
 
     void document::fix_table_children(const std::shared_ptr<render_item>& el_ptr, style_display disp,

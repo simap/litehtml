@@ -138,6 +138,7 @@ set(HEADER_LITEHTML
 	include/litehtml/css_properties.h
 	include/litehtml/line_box.h
 	include/litehtml/render_item.h
+	include/litehtml/render_item_list.h
 	include/litehtml/render_flex.h
 	include/litehtml/render_image.h
 	include/litehtml/render_inline.h

@@ -6,7 +6,7 @@
 
 namespace litehtml
 {
-    class render_item_table : public render_item
+    class render_item_table : public render_item_box
     {
       protected:
         // data for table rendering
@@ -33,14 +33,14 @@ namespace litehtml
         std::shared_ptr<render_item> init() override;
     };
 
-    class render_item_table_part : public render_item
+    class render_item_table_part : public render_item_box
     {
       protected:
         void calc_intrinsic_size() override {}
 
       public:
         explicit render_item_table_part(std::shared_ptr<element> src_el) :
-            render_item(std::move(src_el))
+            render_item_box(std::move(src_el))
         {
         }
 
@@ -50,14 +50,14 @@ namespace litehtml
         }
     };
 
-    class render_item_table_row : public render_item
+    class render_item_table_row : public render_item_box
     {
       protected:
         void calc_intrinsic_size() override {}
 
       public:
         explicit render_item_table_row(std::shared_ptr<element> src_el) :
-            render_item(std::move(src_el))
+            render_item_box(std::move(src_el))
         {
         }
 
