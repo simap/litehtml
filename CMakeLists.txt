@@ -58,6 +58,7 @@ set(SOURCE_LITEHTML
 	src/style.cpp
 	src/stylesheet.cpp
 	src/table.cpp
+	src/text_arena.cpp
 	src/url.cpp
 	src/url_path.cpp
 	src/utf8_strings.cpp
@@ -128,6 +129,7 @@ set(HEADER_LITEHTML
 	include/litehtml/style.h
 	include/litehtml/stylesheet.h
 	include/litehtml/table.h
+	include/litehtml/text_arena.h
 	include/litehtml/types.h
 	include/litehtml/pixel_type.h
 	include/litehtml/url.h

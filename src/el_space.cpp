@@ -18,7 +18,7 @@ bool litehtml::el_space::is_break() const
     white_space ws = css().get_white_space();
     if(ws == white_space_pre || ws == white_space_pre_line || ws == white_space_pre_wrap)
     {
-        if(m_text == "\n")
+        if(!strcmp(m_text, "\n"))
         {
             return true;
         }
