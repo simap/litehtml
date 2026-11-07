@@ -28,10 +28,13 @@ namespace litehtml
         string_vector          m_str_classes;
         std::vector<string_id> m_classes;
         style                  m_style;
-        string_map             m_attrs;
+        // all attributes packed into one string as name\0value\0name\0value\0... (a tag has few attributes)
+        std::string            m_attrs;
         std::vector<string_id> m_pseudo_classes;
 
         void select_all(const css_selector& selector, elements_list& res) override;
+        // offset of the attribute's name in m_attrs, or std::string::npos
+        size_t find_attr(const char* name) const;
 
       public:
         explicit html_tag(const std::shared_ptr<document>& doc);

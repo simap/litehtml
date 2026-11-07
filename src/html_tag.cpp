@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 
 #include "html.h"
 #include "document.h"
@@ -92,7 +93,24 @@ namespace litehtml
             std::string name = lowcase(_name);
             // m_attrs has all attribute values, including class and id, in their original case
             // because in attribute selector values are matched case-sensitively even in quirks mode
-            m_attrs[name] = _val;
+            // Rebuilt at exact size. _val may point into m_attrs, so the old buffer is kept in attrs until return.
+            size_t      pos     = find_attr(name.c_str());
+            size_t      val_len = strlen(_val);
+            std::string attrs;
+            if(pos == std::string::npos)
+            {
+                attrs.reserve(m_attrs.size() + name.size() + val_len + 2);
+                attrs.append(m_attrs).append(name).push_back('\0');
+                attrs.append(_val, val_len).push_back('\0');
+            } else
+            {
+                size_t val_pos = pos + name.size() + 1;
+                size_t val_end = val_pos + strlen(m_attrs.c_str() + val_pos) + 1;
+                attrs.reserve(m_attrs.size() - (val_end - val_pos) + val_len + 1);
+                attrs.append(m_attrs, 0, val_pos).append(_val, val_len).push_back('\0');
+                attrs.append(m_attrs, val_end, std::string::npos);
+            }
+            m_attrs.swap(attrs);
 
             if(name == "class")
             {
@@ -128,7 +146,14 @@ namespace litehtml
             return;
         }
         std::string name = lowcase(_name);
-        m_attrs.erase(name);
+        size_t      pos  = find_attr(name.c_str());
+        if(pos != std::string::npos)
+        {
+            size_t val_pos = pos + name.size() + 1;
+            size_t val_end = val_pos + strlen(m_attrs.c_str() + val_pos) + 1;
+            m_attrs.erase(pos, val_end - pos);
+            m_attrs.shrink_to_fit();
+        }
         if(name == "class")
         {
             m_str_classes.clear();
@@ -141,12 +166,29 @@ namespace litehtml
 
     const char* html_tag::get_attr(const char* name, const char* def) const
     {
-        auto attr = m_attrs.find(name);
-        if(attr != m_attrs.end())
+        size_t pos = find_attr(name);
+        if(pos != std::string::npos)
         {
-            return attr->second.c_str();
+            return m_attrs.c_str() + pos + strlen(name) + 1;
         }
         return def;
+    }
+
+    size_t html_tag::find_attr(const char* name) const
+    {
+        const char* data = m_attrs.c_str();
+        size_t      pos  = 0;
+        while(pos < m_attrs.size())
+        {
+            size_t name_len = strlen(data + pos);
+            size_t val_pos  = pos + name_len + 1;
+            if(strcmp(data + pos, name) == 0)
+            {
+                return pos;
+            }
+            pos = val_pos + strlen(data + val_pos) + 1;
+        }
+        return std::string::npos;
     }
 
     litehtml::elements_list litehtml::html_tag::select_all(const std::string& selector)
