@@ -83,7 +83,7 @@ namespace litehtml
         tmp.reserve(keep_idx.size());
         for(auto idx : keep_idx)
         {
-            tmp.push_back(tokens[idx]);
+            tmp.push_back(std::move(tokens[idx]));
         }
         tokens.swap(tmp);
     }
@@ -137,7 +137,7 @@ namespace litehtml
             {
                 break;
             }
-            result.push_back(tok);
+            result.push_back(std::move(tok));
         }
         tokens = std::move(result); // EXP
     }
@@ -290,14 +290,14 @@ namespace litehtml
                 return rule;
             case CURLY_BLOCK:
                 // Assign the block to the qualified rule’s block. Return the qualified rule.
-                rule->block = token;
+                rule->block = std::move(token);
                 return rule;
             default:
                 // Reconsume the current input token. Consume a component value. Append the returned value to the
                 // qualified rule’s prelude.
                 m_index--;
                 css_token value = consume_component_value();
-                rule->prelude.push_back(value);
+                rule->prelude.push_back(std::move(value));
             }
         }
     }
@@ -329,14 +329,14 @@ namespace litehtml
                 return rule;
             case CURLY_BLOCK:
                 // Assign the block to the at-rule’s block. Return the at-rule.
-                rule->block = token;
+                rule->block = std::move(token);
                 return rule;
             default:
                 // Reconsume the current input token. Consume a component value. Append the returned value to the
                 // at-rule’s prelude.
                 m_index--;
                 css_token value = consume_component_value();
-                rule->prelude.push_back(value);
+                rule->prelude.push_back(std::move(value));
             }
         }
     }
@@ -358,19 +358,20 @@ namespace litehtml
             // Repeatedly consume the next input token and process it as follows:
             css_token token = next_token();
 
-            if(token.type == closing_bracket)
+            if(token.type == closing_bracket || token.type == EOF)
             {
-                return block;
-            }
-            if(token.type == EOF)
-            {
-                css_parse_error("eof in simple block");
+                if(token.type == EOF)
+                {
+                    css_parse_error("eof in simple block");
+                }
+                // drop the growth slack; the token copy constructor used to do this implicitly
+                block.value.shrink_to_fit();
                 return block;
             }
             // Reconsume the current input token. Consume a component value and append it to the value of the block.
             m_index--;
             css_token val = consume_component_value();
-            block.value.push_back(val);
+            block.value.push_back(std::move(val));
         }
     }
 
@@ -413,10 +414,12 @@ namespace litehtml
             switch(token.type)
             {
             case ')':
+                function.value.shrink_to_fit();
                 return function;
 
             case EOF:
                 css_parse_error("eof in function");
+                function.value.shrink_to_fit();
                 return function;
 
             default:
@@ -424,7 +427,7 @@ namespace litehtml
                 // function’s value.
                 m_index--;
                 css_token val = consume_component_value();
-                function.value.push_back(val);
+                function.value.push_back(std::move(val));
             }
         }
     }
