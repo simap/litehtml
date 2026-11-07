@@ -10,10 +10,15 @@ namespace litehtml
     {
       protected:
         std::string m_text;
-        std::string m_transformed_text;
-        size        m_size;
-        bool        m_use_transformed;
-        bool        m_draw_spaces;
+        // text-transform result, allocated only when a transform applies
+        std::unique_ptr<std::string> m_transformed_text;
+        size                         m_size;
+        // whitespace drawn instead of the text: 0 none, 1 " ", 2 "    " (tab), 3 "" (line break)
+        uint8_t m_replacement = 0;
+        bool    m_draw_spaces;
+
+        // the text that is measured and drawn
+        const char* display_text() const;
 
       public:
         el_text(const char* text, const document::ptr& doc);

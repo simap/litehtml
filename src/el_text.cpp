@@ -10,9 +10,23 @@ litehtml::el_text::el_text(const char* text, const document::ptr& doc) :
     {
         m_text = text;
     }
-    m_use_transformed = false;
-    m_draw_spaces     = true;
+    m_draw_spaces = true;
     modify_css([](css_properties& c) { c.set_display(display_inline_text); });
+}
+
+const char* litehtml::el_text::display_text() const
+{
+    switch(m_replacement)
+    {
+    case 1:
+        return " ";
+    case 2:
+        return "    ";
+    case 3:
+        return "";
+    default:
+        return m_transformed_text ? m_transformed_text->c_str() : m_text.c_str();
+    }
 }
 
 void litehtml::el_text::get_content_size(size& sz, pixel_t /*max_width*/)
@@ -43,12 +57,11 @@ void litehtml::el_text::compute_styles(bool /*recursive*/)
 
     if(c.get_text_transform() != text_transform_none)
     {
-        m_transformed_text = m_text;
-        m_use_transformed  = true;
-        get_document()->container()->transform_text(m_transformed_text, c.get_text_transform());
+        m_transformed_text = std::make_unique<std::string>(m_text);
+        get_document()->container()->transform_text(*m_transformed_text, c.get_text_transform());
     } else
     {
-        m_use_transformed = false;
+        m_transformed_text.reset();
     }
 
     element::ptr p = parent();
@@ -70,20 +83,13 @@ void litehtml::el_text::compute_styles(bool /*recursive*/)
 
     if(is_white_space())
     {
-        m_transformed_text = " ";
-        m_use_transformed  = true;
-    } else
+        m_replacement = 1;
+    } else if(m_text == "\t")
     {
-        if(m_text == "\t")
-        {
-            m_transformed_text = "    ";
-            m_use_transformed  = true;
-        }
-        if(m_text == "\n" || m_text == "\r")
-        {
-            m_transformed_text = "";
-            m_use_transformed  = true;
-        }
+        m_replacement = 2;
+    } else if(m_text == "\n" || m_text == "\r")
+    {
+        m_replacement = 3;
     }
 
     font_metrics fm;
@@ -101,7 +107,7 @@ void litehtml::el_text::compute_styles(bool /*recursive*/)
     {
         m_size.height = fm.height;
         m_size.width  = get_document()->container()->text_width(
-            m_use_transformed ? m_transformed_text.c_str() : m_text.c_str(), font);
+            display_text(), font);
     }
     m_draw_spaces = fm.draw_spaces;
 }
@@ -130,7 +136,7 @@ void litehtml::el_text::draw(uint_ptr hdc, pixel_t x, pixel_t y, const position*
             if(font)
             {
                 web_color color = el_parent->css().get_color();
-                doc->container()->draw_text(hdc, m_use_transformed ? m_transformed_text.c_str() : m_text.c_str(), font,
+                doc->container()->draw_text(hdc, display_text(), font,
                                             color, pos);
             }
         }
