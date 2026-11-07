@@ -523,6 +523,33 @@ namespace litehtml
         return ret;
     }
 
+    const css_properties* document::intern_style(const css_properties& style)
+    {
+        std::string key;
+        style.append_key(key);
+        size_t h     = std::hash<std::string>{}(key);
+        auto   range = m_computed_styles.equal_range(h);
+        for(auto it = range.first; it != range.second; ++it)
+        {
+            std::string other;
+            it->second->append_key(other);
+            if(other == key)
+            {
+                return it->second.get();
+            }
+        }
+        return m_computed_styles.emplace(h, std::make_unique<const css_properties>(style))->second.get();
+    }
+
+    const css_properties* document::default_style()
+    {
+        if(!m_default_style)
+        {
+            m_default_style = intern_style(css_properties());
+        }
+        return m_default_style;
+    }
+
     uint_ptr document::get_font(const font_description& descr, font_metrics* fm)
     {
         if(descr.size == 0_px)

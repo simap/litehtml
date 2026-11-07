@@ -109,6 +109,11 @@ namespace litehtml
 
         std::vector<std::tuple<std::string, std::string>> dump_get_attrs();
 
+        // Appends a structural key covering every member (no padding bytes) to out. Two css_properties with
+        // equal keys are interchangeable. Used by document::intern_style to share computed styles.
+        // Any member added to this class must be added to append_key.
+        void append_key(std::string& out) const;
+
         element_position get_position() const;
         void             set_position(element_position mElPosition);
 

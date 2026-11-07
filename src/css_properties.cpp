@@ -680,3 +680,213 @@ std::vector<std::tuple<std::string, std::string>> litehtml::css_properties::dump
 
     return ret;
 }
+
+namespace
+{
+    // Structural key writer: every value is written field by field, never as raw struct bytes.
+    struct key_writer
+    {
+        std::string& out;
+
+        template <class T> void pod(const T& v)
+        {
+            static_assert(std::is_arithmetic_v<T> || std::is_enum_v<T>, "scalars only");
+            out.append(reinterpret_cast<const char*>(&v), sizeof(T));
+        }
+        void px(litehtml::pixel_t v) { pod(v.value()); }
+        void str(const std::string& s)
+        {
+            pod(s.size());
+            out.append(s);
+        }
+        void len(const litehtml::css_length& l)
+        {
+            pod(l.is_predefined());
+            if(l.is_predefined())
+            {
+                pod(l.predef());
+            } else
+            {
+                pod(l.val());
+                pod(l.units());
+            }
+        }
+        void color(const litehtml::web_color& c)
+        {
+            pod(c.red);
+            pod(c.green);
+            pod(c.blue);
+            pod(c.alpha);
+            pod(c.is_current_color);
+        }
+        void margins(const litehtml::css_margins& m)
+        {
+            len(m.left);
+            len(m.right);
+            len(m.top);
+            len(m.bottom);
+        }
+        void offsets(const litehtml::css_offsets& m)
+        {
+            len(m.left);
+            len(m.right);
+            len(m.top);
+            len(m.bottom);
+        }
+        void border(const litehtml::css_border& b)
+        {
+            len(b.width);
+            pod(b.style);
+            color(b.color);
+        }
+        void ints(const litehtml::int_vector& v)
+        {
+            pod(v.size());
+            for(int i : v) pod(i);
+        }
+        void lens(const litehtml::length_vector& v)
+        {
+            pod(v.size());
+            for(const auto& l : v) len(l);
+        }
+        void gradient(const litehtml::gradient& g)
+        {
+            pod(g.m_type);
+            pod(g.m_side);
+            pod(g.angle);
+            pod(g.m_colors.size());
+            for(const auto& cs : g.m_colors)
+            {
+                pod(cs.is_color_hint);
+                color(cs.color);
+                pod(cs.length.has_value());
+                if(cs.length) len(*cs.length);
+                pod(cs.angle.has_value());
+                if(cs.angle) pod(*cs.angle);
+            }
+            len(g.position_x);
+            len(g.position_y);
+            pod(g.radial_shape);
+            pod(g.radial_extent);
+            len(g.radial_radius_x);
+            len(g.radial_radius_y);
+            pod(g.conic_from_angle);
+            pod(g.color_space);
+            pod(g.hue_interpolation);
+        }
+        void bg(const litehtml::background& b)
+        {
+            pod(b.m_image.size());
+            for(const auto& im : b.m_image)
+            {
+                pod(im.type);
+                str(im.url);
+                gradient(im.m_gradient);
+            }
+            str(b.m_baseurl);
+            color(b.m_color);
+            ints(b.m_attachment);
+            lens(b.m_position_x);
+            lens(b.m_position_y);
+            pod(b.m_size.size());
+            for(const auto& s : b.m_size)
+            {
+                len(s.width);
+                len(s.height);
+            }
+            ints(b.m_repeat);
+            ints(b.m_clip);
+            ints(b.m_origin);
+        }
+        void metrics(const litehtml::font_metrics& m)
+        {
+            px(m.font_size);
+            px(m.height);
+            px(m.ascent);
+            px(m.descent);
+            px(m.x_height);
+            px(m.ch_width);
+            pod(m.draw_spaces);
+            px(m.sub_shift);
+            px(m.super_shift);
+        }
+    };
+} // namespace
+
+void litehtml::css_properties::append_key(std::string& out) const
+{
+    key_writer w{out};
+    w.pod(m_el_position);
+    w.pod(m_text_align);
+    w.pod(m_overflow);
+    w.pod(m_white_space);
+    w.pod(m_display);
+    w.pod(m_visibility);
+    w.pod(m_appearance);
+    w.pod(m_box_sizing);
+    w.len(m_z_index);
+    w.pod(m_vertical_align);
+    w.pod(m_float);
+    w.pod(m_clear);
+    w.margins(m_css_margins);
+    w.margins(m_css_padding);
+    w.border(m_css_borders.left);
+    w.border(m_css_borders.top);
+    w.border(m_css_borders.right);
+    w.border(m_css_borders.bottom);
+    w.len(m_css_borders.radius.top_left_x);
+    w.len(m_css_borders.radius.top_left_y);
+    w.len(m_css_borders.radius.top_right_x);
+    w.len(m_css_borders.radius.top_right_y);
+    w.len(m_css_borders.radius.bottom_right_x);
+    w.len(m_css_borders.radius.bottom_right_y);
+    w.len(m_css_borders.radius.bottom_left_x);
+    w.len(m_css_borders.radius.bottom_left_y);
+    w.len(m_css_width);
+    w.len(m_css_height);
+    w.len(m_css_min_width);
+    w.len(m_css_min_height);
+    w.len(m_css_max_width);
+    w.len(m_css_max_height);
+    w.offsets(m_css_offsets);
+    w.len(m_css_text_indent);
+    w.len(m_css_line_height);
+    w.len(m_line_height.css_value);
+    w.px(m_line_height.computed_value);
+    w.pod(m_list_style_type);
+    w.pod(m_list_style_position);
+    w.str(m_list_style_image);
+    w.str(m_list_style_image_baseurl);
+    w.bg(m_bg);
+    w.pod(m_font);
+    w.len(m_font_size);
+    w.str(m_font_family);
+    w.len(m_font_weight);
+    w.pod(m_font_style);
+    w.pod(m_text_decoration_line);
+    w.pod(m_text_decoration_style);
+    w.len(m_text_decoration_thickness);
+    w.color(m_text_decoration_color);
+    w.str(m_text_emphasis_style);
+    w.color(m_text_emphasis_color);
+    w.pod(m_text_emphasis_position);
+    w.metrics(m_font_metrics);
+    w.pod(m_text_transform);
+    w.color(m_color);
+    w.str(m_cursor);
+    w.str(m_content);
+    w.pod(m_border_collapse);
+    w.len(m_css_border_spacing_x);
+    w.len(m_css_border_spacing_y);
+    w.pod(m_flex_grow);
+    w.pod(m_flex_shrink);
+    w.len(m_flex_basis);
+    w.pod(m_flex_direction);
+    w.pod(m_flex_wrap);
+    w.pod(m_flex_justify_content);
+    w.pod(m_flex_align_items);
+    w.pod(m_flex_align_self);
+    w.pod(m_flex_align_content);
+    w.pod(m_caption_side);
+    w.pod(m_order);
+}

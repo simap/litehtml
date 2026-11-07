@@ -2,12 +2,15 @@
 #define LITEHTML_DOCUMENT_H
 
 #include "stylesheet.h"
+#include "css_properties.h"
 #include "encodings.h"
 #include "font_description.h"
 #include "master_css.h"
 #include "types.h"
 
 #include <functional>
+#include <memory>
+#include <unordered_map>
 #include <vector>
 
 using GumboOutput = struct GumboInternalOutput;
@@ -53,6 +56,11 @@ namespace litehtml
         using weak_ptr = std::weak_ptr<document>;
 
       private:
+        // Interned computed styles, shared by elements (see intern_style). Declared first so it is destroyed
+        // after m_root and every element that points into it.
+        std::unordered_multimap<size_t, std::unique_ptr<const css_properties>> m_computed_styles;
+        const css_properties*                                                 m_default_style = nullptr;
+
         std::shared_ptr<element>                m_root;
         std::shared_ptr<render_item>            m_root_render;
         document_container*                     m_container;
@@ -88,6 +96,17 @@ namespace litehtml
             return m_mode;
         }
         uint_ptr  get_font(const font_description& descr, font_metrics* fm);
+
+        // Returns the shared immutable instance structurally equal to style, adding a copy if none exists.
+        // The instance lives as long as the document.
+        const css_properties* intern_style(const css_properties& style);
+        // Interned default-constructed css_properties (the style of an element before compute).
+        const css_properties* default_style();
+        size_t                interned_style_count() const
+        {
+            return m_computed_styles.size();
+        }
+
         pixel_t   render(pixel_t max_width, render_type rt = render_all);
         void      draw(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip);
         web_color get_def_color() const
