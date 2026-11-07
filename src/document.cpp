@@ -62,7 +62,7 @@ namespace litehtml
 
     document::ptr document::createFromString(const estring& str, document_container* container,
                                              const std::string& master_styles, const std::string& user_styles,
-                                             bool prune_unrendered)
+                                             unsigned static_options)
     {
         // Create litehtml::document
         document::ptr doc = std::make_shared<document>(container);
@@ -70,10 +70,19 @@ namespace litehtml
         // host measurement hook, see render()
         if(getenv("LITEHTML_PRUNE"))
         {
-            prune_unrendered = true;
+            static_options |= static_prune_unrendered;
+        }
+        if(const char* rel = getenv("LITEHTML_RELEASE"))
+        {
+            if(strcmp(rel, "early") == 0)
+            {
+                static_options |= static_release_after_cascade;
+            }
         }
 #endif
-        doc->m_prune_unrendered = prune_unrendered;
+        const bool prune_unrendered  = (static_options & static_prune_unrendered) != 0;
+        doc->m_prune_unrendered      = prune_unrendered;
+        doc->m_release_after_cascade = (static_options & static_release_after_cascade) != 0;
 
         // Parse document into GumboOutput
         GumboOutput* output = doc->parse_html(str);
@@ -199,6 +208,12 @@ namespace litehtml
                 m_pruned_before_render = prune_never_rendered(*m_root);
             }
             LH_PHASE("cascade");
+            if(m_release_after_cascade)
+            {
+                // the render tree build reads attributes (colspan, rowspan, span, start), keep them for now
+                release_restyle_state(true);
+                LH_PHASE("release");
+            }
 
             // Create rendering tree
             m_root_render = m_root->create_render_item(nullptr);
@@ -218,6 +233,10 @@ namespace litehtml
             if(m_prune_unrendered)
             {
                 m_pruned_after_init = prune_unregistered(*m_root);
+            }
+            if(m_release_after_cascade)
+            {
+                release_restyle_state(false);
             }
         }
         LH_PHASE("tree");
@@ -715,9 +734,9 @@ namespace litehtml
 #ifdef LITEHTML_STATIC_RELEASE_ENV
         // Host measurement hook, compiled only by harness/lanes/static-release/build.sh: the harness cannot
         // call release_restyle_state() between render() and draw(), so release here when LITEHTML_RELEASE is
-        // set (value "keep" keeps attributes).
+        // set (value "keep" keeps attributes; value "early" was handled in createFromString).
         LH_PHASE("layout");
-        if(const char* rel = getenv("LITEHTML_RELEASE"))
+        if(const char* rel = getenv("LITEHTML_RELEASE"); rel && strcmp(rel, "early") != 0)
         {
             release_restyle_state(strcmp(rel, "keep") == 0);
             LH_PHASE("release");
@@ -747,11 +766,12 @@ namespace litehtml
 
     void document::release_restyle_state(bool keep_attributes)
     {
-        if(m_restyle_released)
+        if(m_restyle_released && (keep_attributes || m_attributes_released))
         {
             return;
         }
-        m_restyle_released = true;
+        m_restyle_released   = true;
+        m_attributes_released = !keep_attributes;
         if(m_root)
         {
             release_element_tree(m_root, keep_attributes);

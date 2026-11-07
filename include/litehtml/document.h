@@ -35,6 +35,13 @@ namespace litehtml
         }
     };
 
+    // Options for a one-shot static render, passed to document::createFromString. All off by default.
+    enum static_render_option : unsigned
+    {
+        static_prune_unrendered      = 1, // document::set_prune_unrendered
+        static_release_after_cascade = 2, // document::set_release_after_cascade
+    };
+
     class dumper
     {
       public:
@@ -84,6 +91,8 @@ namespace litehtml
         bool                                    m_finalized = false;
         bool                                    m_restyle_released = false;
         bool                                    m_prune_unrendered = false;
+        bool                                    m_release_after_cascade = false;
+        bool                                    m_attributes_released   = false;
         size_t                                  m_pruned_before_render = 0;
         size_t                                  m_pruned_after_init    = 0;
 
@@ -160,7 +169,8 @@ namespace litehtml
         // ordered list marker index is kept. Afterwards media_changed(), lang_changed() and hover or active
         // state changes do not restyle, append_children_from_string() does nothing, and get_attr() returns
         // the default for every attribute except list_index unless keep_attributes was set (so anchor href
-        // lookups on click need keep_attributes). Calling it again does nothing.
+        // lookups on click need keep_attributes). Calling it again does nothing, except that a call without
+        // keep_attributes after one with it releases the attributes.
         void release_restyle_state(bool keep_attributes = false);
         bool restyle_released() const
         {
@@ -168,11 +178,22 @@ namespace litehtml
         }
 
         // see doc/document_createFromString.txt
-        // prune_unrendered: see set_prune_unrendered.
+        // static_options: static_render_option bits, see set_prune_unrendered and set_release_after_cascade.
         static document::ptr createFromString(const estring& str, document_container* container,
-                                              const std::string& master_styles   = litehtml::master_css,
-                                              const std::string& user_styles     = {},
-                                              bool               prune_unrendered = false);
+                                              const std::string& master_styles  = litehtml::master_css,
+                                              const std::string& user_styles    = {},
+                                              unsigned           static_options = 0);
+
+        // Static render support, off by default. Set before finalization (createFromString does it from its
+        // argument). Runs release_restyle_state(true) as soon as styles are computed, before the render tree
+        // is built, so the restyle state never coexists with the render tree and layout; the attributes are
+        // released at the end of finalization, after the render tree init read colspan, rowspan, span and
+        // start. Layout (render()) reads no attribute and no declared property. Same restrictions as
+        // release_restyle_state, from the end of createFromString on.
+        void set_release_after_cascade(bool on)
+        {
+            m_release_after_cascade = on;
+        }
 
         // Static render support, off by default. Set before finalization (createFromString does it from its
         // argument). After styles are computed, removes from the DOM every subtree that cannot produce a
