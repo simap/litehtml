@@ -128,16 +128,24 @@ litehtml::pixel_t litehtml::render_item_inline_context::_render_content(pixel_t 
     {
         if(collapse_top_margin())
         {
-            pixel_t old_top = m_margins.top;
-            m_margins.top   = std::max(m_line_boxes.front()->top_margin(), m_margins.top);
-            if(m_margins.top != old_top)
+            pixel_t old_top = box_margins().top;
+            pixel_t new_top = std::max(m_line_boxes.front()->top_margin(), old_top);
+            if(new_top.value() != old_top.value())
             {
-                fmt_ctx->update_floats(m_margins.top - old_top, shared_from_this());
+                edit_margins().top = new_top;
+            }
+            if(new_top != old_top)
+            {
+                fmt_ctx->update_floats(new_top - old_top, shared_from_this());
             }
         }
         if(collapse_bottom_margin())
         {
-            m_margins.bottom = std::max(m_line_boxes.back()->bottom_margin(), m_margins.bottom);
+            pixel_t new_bottom = std::max(m_line_boxes.back()->bottom_margin(), box_margins().bottom);
+            if(new_bottom.value() != box_margins().bottom.value())
+            {
+                edit_margins().bottom = new_bottom;
+            }
             m_pos.height     = m_line_boxes.back()->bottom() - m_line_boxes.back()->bottom_margin();
         } else
         {

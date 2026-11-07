@@ -96,7 +96,7 @@ litehtml::pixel_t litehtml::render_item_table::_render(pixel_t x, pixel_t y,
     min_table_width += table_width_spacing;
     max_table_width += table_width_spacing;
     table_width     += table_width_spacing;
-    m_grid->calc_horizontal_positions(m_borders, src_el()->css().get_border_collapse(), m_border_spacing_x);
+    m_grid->calc_horizontal_positions(box_borders(), src_el()->css().get_border_collapse(), m_border_spacing_x);
 
     bool row_span_found = false;
 
@@ -177,7 +177,7 @@ litehtml::pixel_t litehtml::render_item_table::_render(pixel_t x, pixel_t y,
     pixel_t block_height = 0_px;
     if(self_size.height.type != containing_block_context::cbc_value_type_auto && self_size.height.value > 0_px)
     {
-        block_height = self_size.height.value - (m_padding.height() + m_borders.height());
+        block_height = self_size.height.value - (box_padding().height() + box_borders().height());
     }
 
     // calculate minimum height from m_css.get_min_height()
@@ -194,7 +194,7 @@ litehtml::pixel_t litehtml::render_item_table::_render(pixel_t x, pixel_t y,
     pixel_t minimum_table_height = std::max(block_height, min_height);
 
     m_grid->calc_rows_height(minimum_table_height - table_height_spacing, m_border_spacing_y);
-    m_grid->calc_vertical_positions(m_borders, src_el()->css().get_border_collapse(), m_border_spacing_y);
+    m_grid->calc_vertical_positions(box_borders(), src_el()->css().get_border_collapse(), m_border_spacing_y);
 
     pixel_t table_height = 0_px;
 
@@ -497,10 +497,10 @@ bool litehtml::render_item_table_row::for_inline_boxes(
             }
             position pos;
             pos.x = el->left() + el->margin_left();
-            pos.y = el->top() - m_padding.top - m_borders.top;
+            pos.y = el->top() - box_padding().top - box_borders().top;
 
             pos.width  = el->right() - pos.x - el->margin_right() - el->margin_left();
-            pos.height = el->height() + m_padding.top + m_padding.bottom + m_borders.top + m_borders.bottom;
+            pos.height = el->height() + box_padding().top + box_padding().bottom + box_borders().top + box_borders().bottom;
 
             prev_pos = pos;
         }
@@ -520,10 +520,10 @@ bool litehtml::render_item_table_row::is_point_inside(pixel_t x, pixel_t y) cons
         if(el->src_el()->css().get_display() == display_table_cell)
         {
             pos.x = el->left() + el->margin_left();
-            pos.y = el->top() - m_padding.top - m_borders.top;
+            pos.y = el->top() - box_padding().top - box_borders().top;
 
             pos.width  = el->right() - pos.x - el->margin_right() - el->margin_left();
-            pos.height = el->height() + m_padding.top + m_padding.bottom + m_borders.top + m_borders.bottom;
+            pos.height = el->height() + box_padding().top + box_padding().bottom + box_borders().top + box_borders().bottom;
 
             if(pos.is_point_inside(x, y))
             {

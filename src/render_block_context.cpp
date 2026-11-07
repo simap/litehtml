@@ -42,7 +42,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
                 child_top           = fmt_ctx->get_cleared_top(el, child_top);
                 pixel_t child_left  = 0_px;
                 pixel_t child_width = self_size.render_width;
-                pixel_t top_margin  = m_margins.top;
+                pixel_t top_margin  = box_margins().top;
 
                 el->calc_outlines(self_size.width);
 
@@ -100,7 +100,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
                         //  Rollback top margin collapse if the block was moved to the new line
                         if(is_first && new_pos.new_line && collapse_top_margin())
                         {
-                            top_margin = m_margins.top;
+                            top_margin = box_margins().top;
                         }
                     }
                     rw  = el->render(new_pos.left, new_pos.top, self_size.new_width(new_pos.width), fmt_ctx);
@@ -116,7 +116,10 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
                     el->pos().x += auto_margin;
                 }
                 ret_width       = std::max(ret_width, rw);
-                m_margins.top   = top_margin;
+                if(top_margin.value() != box_margins().top.value())
+                {
+                    edit_margins().top = top_margin;
+                }
                 child_top      += el->height();
                 last_margin     = el->get_margins().bottom;
                 last_margin_el  = el;
@@ -140,10 +143,14 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
         if(collapse_bottom_margin())
         {
             m_pos.height     -= last_margin;
-            m_margins.bottom  = std::max(m_margins.bottom, last_margin);
-            if(last_margin_el)
+            pixel_t new_bottom = std::max(box_margins().bottom, last_margin);
+            if(new_bottom.value() != box_margins().bottom.value())
             {
-                last_margin_el->get_margins().bottom = 0_px;
+                edit_margins().bottom = new_bottom;
+            }
+            if(last_margin_el && last_margin_el->get_margins().bottom.value() != 0.0f)
+            {
+                last_margin_el->edit_margins().bottom = 0_px;
             }
         }
     }

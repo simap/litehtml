@@ -13,20 +13,26 @@ litehtml::render_item::render_item(std::shared_ptr<element> _src_el) :
     document::ptr doc = src_el()->get_document();
     auto          fm  = css().get_font_metrics();
 
-    m_margins.left   = doc->to_pixels(src_el()->css().get_margins().left, fm, 0_px);
-    m_margins.right  = doc->to_pixels(src_el()->css().get_margins().right, fm, 0_px);
-    m_margins.top    = doc->to_pixels(src_el()->css().get_margins().top, fm, 0_px);
-    m_margins.bottom = doc->to_pixels(src_el()->css().get_margins().bottom, fm, 0_px);
+    margins mrg;
+    margins pad;
+    margins brd;
 
-    m_padding.left   = doc->to_pixels(src_el()->css().get_padding().left, fm, 0_px);
-    m_padding.right  = doc->to_pixels(src_el()->css().get_padding().right, fm, 0_px);
-    m_padding.top    = doc->to_pixels(src_el()->css().get_padding().top, fm, 0_px);
-    m_padding.bottom = doc->to_pixels(src_el()->css().get_padding().bottom, fm, 0_px);
+    mrg.left   = doc->to_pixels(src_el()->css().get_margins().left, fm, 0_px);
+    mrg.right  = doc->to_pixels(src_el()->css().get_margins().right, fm, 0_px);
+    mrg.top    = doc->to_pixels(src_el()->css().get_margins().top, fm, 0_px);
+    mrg.bottom = doc->to_pixels(src_el()->css().get_margins().bottom, fm, 0_px);
 
-    m_borders.left   = doc->to_pixels(src_el()->css().get_borders().left.width, fm, 0_px);
-    m_borders.right  = doc->to_pixels(src_el()->css().get_borders().right.width, fm, 0_px);
-    m_borders.top    = doc->to_pixels(src_el()->css().get_borders().top.width, fm, 0_px);
-    m_borders.bottom = doc->to_pixels(src_el()->css().get_borders().bottom.width, fm, 0_px);
+    pad.left   = doc->to_pixels(src_el()->css().get_padding().left, fm, 0_px);
+    pad.right  = doc->to_pixels(src_el()->css().get_padding().right, fm, 0_px);
+    pad.top    = doc->to_pixels(src_el()->css().get_padding().top, fm, 0_px);
+    pad.bottom = doc->to_pixels(src_el()->css().get_padding().bottom, fm, 0_px);
+
+    brd.left   = doc->to_pixels(src_el()->css().get_borders().left.width, fm, 0_px);
+    brd.right  = doc->to_pixels(src_el()->css().get_borders().right.width, fm, 0_px);
+    brd.top    = doc->to_pixels(src_el()->css().get_borders().top.width, fm, 0_px);
+    brd.bottom = doc->to_pixels(src_el()->css().get_borders().bottom.width, fm, 0_px);
+
+    set_box(mrg, pad, brd);
 }
 
 void litehtml::render_item::update_intrinsic_size()
@@ -157,20 +163,26 @@ litehtml::pixel_t litehtml::render_item::render(pixel_t x, pixel_t y,
 
 void litehtml::render_item::calc_outlines(pixel_t parent_width)
 {
-    m_padding.left  = m_element->css().get_padding().left.calc_percent(parent_width);
-    m_padding.right = m_element->css().get_padding().right.calc_percent(parent_width);
+    margins mrg = box_margins();
+    margins pad = box_padding();
+    margins brd = box_borders();
 
-    m_borders.left  = m_element->css().get_borders().left.width.calc_percent(parent_width);
-    m_borders.right = m_element->css().get_borders().right.width.calc_percent(parent_width);
+    pad.left  = m_element->css().get_padding().left.calc_percent(parent_width);
+    pad.right = m_element->css().get_padding().right.calc_percent(parent_width);
 
-    m_margins.left  = m_element->css().get_margins().left.calc_percent(parent_width);
-    m_margins.right = m_element->css().get_margins().right.calc_percent(parent_width);
+    brd.left  = m_element->css().get_borders().left.width.calc_percent(parent_width);
+    brd.right = m_element->css().get_borders().right.width.calc_percent(parent_width);
 
-    m_margins.top    = m_element->css().get_margins().top.calc_percent(parent_width);
-    m_margins.bottom = m_element->css().get_margins().bottom.calc_percent(parent_width);
+    mrg.left  = m_element->css().get_margins().left.calc_percent(parent_width);
+    mrg.right = m_element->css().get_margins().right.calc_percent(parent_width);
 
-    m_padding.top    = m_element->css().get_padding().top.calc_percent(parent_width);
-    m_padding.bottom = m_element->css().get_padding().bottom.calc_percent(parent_width);
+    mrg.top    = m_element->css().get_margins().top.calc_percent(parent_width);
+    mrg.bottom = m_element->css().get_margins().bottom.calc_percent(parent_width);
+
+    pad.top    = m_element->css().get_padding().top.calc_percent(parent_width);
+    pad.bottom = m_element->css().get_padding().bottom.calc_percent(parent_width);
+
+    set_box(mrg, pad, brd);
 }
 
 litehtml::pixel_t litehtml::render_item::calc_auto_margins(pixel_t parent_width)
@@ -178,34 +190,38 @@ litehtml::pixel_t litehtml::render_item::calc_auto_margins(pixel_t parent_width)
     if((src_el()->css().get_display() == display_block || src_el()->css().get_display() == display_table) &&
        src_el()->css().get_position() != element_position_absolute && src_el()->css().get_float() == float_none)
     {
+        const margins& brd = box_borders();
+        const margins& pad = box_padding();
+        margins        mrg = box_margins();
         if(src_el()->css().get_margins().left.is_predefined() && src_el()->css().get_margins().right.is_predefined())
         {
-            pixel_t el_width = m_pos.width + m_borders.left + m_borders.right + m_padding.left + m_padding.right;
+            pixel_t el_width = m_pos.width + brd.left + brd.right + pad.left + pad.right;
             if(el_width <= parent_width)
             {
-                m_margins.left  = (parent_width - el_width) / 2_px;
-                m_margins.right = (parent_width - el_width) - m_margins.left;
+                mrg.left  = (parent_width - el_width) / 2_px;
+                mrg.right = (parent_width - el_width) - mrg.left;
             } else
             {
-                m_margins.left  = 0;
-                m_margins.right = 0;
+                mrg.left  = 0;
+                mrg.right = 0;
             }
-            return m_margins.left;
+            set_margins(mrg);
+            return mrg.left;
         }
         if(src_el()->css().get_margins().left.is_predefined() && !src_el()->css().get_margins().right.is_predefined())
         {
-            pixel_t el_width =
-                m_pos.width + m_borders.left + m_borders.right + m_padding.left + m_padding.right + m_margins.right;
-            m_margins.left = parent_width - el_width;
-            m_margins.left = std::max<pixel_t>(m_margins.left, 0_px);
-            return m_margins.left;
+            pixel_t el_width = m_pos.width + brd.left + brd.right + pad.left + pad.right + mrg.right;
+            mrg.left         = parent_width - el_width;
+            mrg.left         = std::max<pixel_t>(mrg.left, 0_px);
+            set_margins(mrg);
+            return mrg.left;
         }
         if(!src_el()->css().get_margins().left.is_predefined() && src_el()->css().get_margins().right.is_predefined())
         {
-            pixel_t el_width =
-                m_pos.width + m_borders.left + m_borders.right + m_padding.left + m_padding.right + m_margins.left;
-            m_margins.right = parent_width - el_width;
-            m_margins.right = std::max<pixel_t>(m_margins.right, 0_px);
+            pixel_t el_width = m_pos.width + brd.left + brd.right + pad.left + pad.right + mrg.left;
+            mrg.right        = parent_width - el_width;
+            mrg.right        = std::max<pixel_t>(mrg.right, 0_px);
+            set_margins(mrg);
         }
     }
     return 0_px;
@@ -379,8 +395,8 @@ void litehtml::render_item::render_positioned(render_type rt)
                 containing_block_size.width  = view_port.width;
             } else
             {
-                containing_block_size.height = m_pos.height + m_padding.height();
-                containing_block_size.width  = m_pos.width + m_padding.width();
+                containing_block_size.height = m_pos.height + box_padding().height();
+                containing_block_size.width  = m_pos.width + box_padding().width();
             }
 
             css_length css_left   = el->src_el()->css().get_offsets().left;
@@ -447,11 +463,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // content per 10.6.7, set 'auto' values for 'margin-top' and 'margin-bottom' to 0, and solve for 'top'
                 if(el->css().get_margins().top.is_predefined())
                 {
-                    el->m_margins.top = 0;
+                    el->edit_margins().top = 0;
                 }
                 if(el->css().get_margins().bottom.is_predefined())
                 {
-                    el->m_margins.bottom = 0;
+                    el->edit_margins().bottom = 0;
                 }
                 height = el->height();
                 bottom = css_bottom.calc_percent(containing_block_size.height);
@@ -462,11 +478,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // set 'auto' values for 'margin-top' and 'margin-bottom' to 0, and solve for 'bottom'
                 if(el->css().get_margins().top.is_predefined())
                 {
-                    el->m_margins.top = 0;
+                    el->edit_margins().top = 0;
                 }
                 if(el->css().get_margins().bottom.is_predefined())
                 {
-                    el->m_margins.bottom = 0;
+                    el->edit_margins().bottom = 0;
                 }
                 top    = el_static_y - el->content_offset_top();
                 height = fix_height_min_max(el_height.calc_percent(containing_block_size.height));
@@ -477,11 +493,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // and solve for 'bottom'
                 if(el->css().get_margins().top.is_predefined())
                 {
-                    el->m_margins.top = 0;
+                    el->edit_margins().top = 0;
                 }
                 if(el->css().get_margins().bottom.is_predefined())
                 {
-                    el->m_margins.bottom = 0;
+                    el->edit_margins().bottom = 0;
                 }
                 height = el->height();
                 top    = css_top.calc_percent(containing_block_size.height);
@@ -491,11 +507,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // and 'margin-bottom' to 0, and solve for 'top'
                 if(el->css().get_margins().top.is_predefined())
                 {
-                    el->m_margins.top = 0;
+                    el->edit_margins().top = 0;
                 }
                 if(el->css().get_margins().bottom.is_predefined())
                 {
-                    el->m_margins.bottom = 0;
+                    el->edit_margins().bottom = 0;
                 }
                 height = fix_height_min_max(el_height.calc_percent(containing_block_size.height));
                 bottom = css_bottom.calc_percent(containing_block_size.height);
@@ -506,11 +522,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // 'margin-bottom' are set to 0 and solve for 'height'
                 if(el->css().get_margins().top.is_predefined())
                 {
-                    el->m_margins.top = 0;
+                    el->edit_margins().top = 0;
                 }
                 if(el->css().get_margins().bottom.is_predefined())
                 {
-                    el->m_margins.bottom = 0;
+                    el->edit_margins().bottom = 0;
                 }
                 bottom = css_bottom.calc_percent(containing_block_size.height);
                 top    = css_top.calc_percent(containing_block_size.height);
@@ -534,11 +550,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                         {
                             if(el->css().get_margins().top.is_predefined())
                             {
-                                el->m_margins.top = reminded / pixel_t(divider);
+                                el->edit_margins().top = reminded / pixel_t(divider);
                             }
                             if(el->css().get_margins().bottom.is_predefined())
                             {
-                                el->m_margins.bottom = reminded / pixel_t(divider);
+                                el->edit_margins().bottom = reminded / pixel_t(divider);
                             }
                         }
                     }
@@ -567,11 +583,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                         {
                             if(el->css().get_margins().top.is_predefined())
                             {
-                                el->m_margins.top = reminded / pixel_t(divider);
+                                el->edit_margins().top = reminded / pixel_t(divider);
                             }
                             if(el->css().get_margins().bottom.is_predefined())
                             {
-                                el->m_margins.bottom = reminded / pixel_t(divider);
+                                el->edit_margins().bottom = reminded / pixel_t(divider);
                             }
                         }
                         height += el->content_offset_height();
@@ -583,11 +599,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // and 'margin-bottom' to 0 and solve for 'bottom'
                 if(el->css().get_margins().top.is_predefined())
                 {
-                    el->m_margins.top = 0;
+                    el->edit_margins().top = 0;
                 }
                 if(el->css().get_margins().bottom.is_predefined())
                 {
-                    el->m_margins.bottom = 0;
+                    el->edit_margins().bottom = 0;
                 }
                 height = fix_height_min_max(el_height.calc_percent(containing_block_size.height));
                 top    = css_top.calc_percent(containing_block_size.height);
@@ -597,11 +613,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // apply rule number three.
                 if(el->css().get_margins().top.is_predefined())
                 {
-                    el->m_margins.top = 0;
+                    el->edit_margins().top = 0;
                 }
                 if(el->css().get_margins().bottom.is_predefined())
                 {
-                    el->m_margins.bottom = 0;
+                    el->edit_margins().bottom = 0;
                 }
                 height = el->height();
                 top    = el_static_y - el->content_offset_top();
@@ -617,20 +633,20 @@ void litehtml::render_item::render_positioned(render_type rt)
                 {
                     // If both 'margin-top' and 'margin-bottom' are 'auto', solve the equation under the extra
                     // constraint that the two margins get equal values.
-                    el->m_margins.top = el->m_margins.bottom  = remained / 2_px;
-                    height                                   += el->m_margins.top + el->m_margins.bottom;
+                    el->edit_margins().top = el->edit_margins().bottom  = remained / 2_px;
+                    height                                   += el->edit_margins().top + el->edit_margins().bottom;
                 } else
                 {
                     // If one of 'margin-top' or 'margin-bottom' is 'auto', solve the equation for that value.
                     if(el->css().get_margins().top.is_predefined())
                     {
-                        el->m_margins.top  = remained;
-                        height            += el->m_margins.top;
+                        el->edit_margins().top  = remained;
+                        height            += el->edit_margins().top;
                     }
                     if(el->css().get_margins().bottom.is_predefined())
                     {
-                        el->m_margins.bottom  = remained;
-                        height               += el->m_margins.bottom;
+                        el->edit_margins().bottom  = remained;
+                        height               += el->edit_margins().bottom;
                     }
                 }
             }
@@ -653,11 +669,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // Then solve for 'left'
                 if(el->css().get_margins().left.is_predefined())
                 {
-                    el->m_margins.left = 0;
+                    el->edit_margins().left = 0;
                 }
                 if(el->css().get_margins().right.is_predefined())
                 {
-                    el->m_margins.right = 0;
+                    el->edit_margins().right = 0;
                 }
                 width = el->width();
                 right = css_right.calc_percent(containing_block_size.width);
@@ -670,11 +686,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // (if 'direction is 'rtl') or 'right' (if 'direction' is 'ltr').
                 if(el->css().get_margins().left.is_predefined())
                 {
-                    el->m_margins.left = 0;
+                    el->edit_margins().left = 0;
                 }
                 if(el->css().get_margins().right.is_predefined())
                 {
-                    el->m_margins.right = 0;
+                    el->edit_margins().right = 0;
                 }
                 left  = el_static_x - el->content_offset_left();
                 width = fix_width_min_max(el_width.calc_percent(containing_block_size.width));
@@ -684,11 +700,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // Then solve for 'right'
                 if(el->css().get_margins().left.is_predefined())
                 {
-                    el->m_margins.left = 0;
+                    el->edit_margins().left = 0;
                 }
                 if(el->css().get_margins().right.is_predefined())
                 {
-                    el->m_margins.right = 0;
+                    el->edit_margins().right = 0;
                 }
                 width = el->width();
                 left  = css_left.calc_percent(containing_block_size.width);
@@ -697,11 +713,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // 4. 'left' is 'auto', 'width' and 'right' are not 'auto', then solve for 'left'
                 if(el->css().get_margins().left.is_predefined())
                 {
-                    el->m_margins.left = 0;
+                    el->edit_margins().left = 0;
                 }
                 if(el->css().get_margins().right.is_predefined())
                 {
-                    el->m_margins.right = 0;
+                    el->edit_margins().right = 0;
                 }
                 right = css_right.calc_percent(containing_block_size.width);
                 width = fix_width_min_max(el_width.calc_percent(containing_block_size.width));
@@ -711,11 +727,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // 5. 'width' is 'auto', 'left' and 'right' are not 'auto', then solve for 'width'
                 if(el->css().get_margins().left.is_predefined())
                 {
-                    el->m_margins.left = 0;
+                    el->edit_margins().left = 0;
                 }
                 if(el->css().get_margins().right.is_predefined())
                 {
-                    el->m_margins.right = 0;
+                    el->edit_margins().right = 0;
                 }
                 left  = css_left.calc_percent(containing_block_size.width);
                 right = css_right.calc_percent(containing_block_size.width);
@@ -739,11 +755,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                         {
                             if(el->css().get_margins().left.is_predefined())
                             {
-                                el->m_margins.left = reminded / pixel_t(divider);
+                                el->edit_margins().left = reminded / pixel_t(divider);
                             }
                             if(el->css().get_margins().right.is_predefined())
                             {
-                                el->m_margins.right = reminded / pixel_t(divider);
+                                el->edit_margins().right = reminded / pixel_t(divider);
                             }
                         }
                     }
@@ -772,11 +788,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                         {
                             if(el->css().get_margins().left.is_predefined())
                             {
-                                el->m_margins.left = reminded / pixel_t(divider);
+                                el->edit_margins().left = reminded / pixel_t(divider);
                             }
                             if(el->css().get_margins().right.is_predefined())
                             {
-                                el->m_margins.right = reminded / pixel_t(divider);
+                                el->edit_margins().right = reminded / pixel_t(divider);
                             }
                         }
                         width += el->content_offset_width();
@@ -787,11 +803,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // 6. 'right' is 'auto', 'left' and 'width' are not 'auto', then solve for 'right'
                 if(el->css().get_margins().left.is_predefined())
                 {
-                    el->m_margins.left = 0;
+                    el->edit_margins().left = 0;
                 }
                 if(el->css().get_margins().right.is_predefined())
                 {
-                    el->m_margins.right = 0;
+                    el->edit_margins().right = 0;
                 }
                 left  = css_left.calc_percent(containing_block_size.width);
                 width = fix_width_min_max(el_width.calc_percent(containing_block_size.width));
@@ -804,11 +820,11 @@ void litehtml::render_item::render_positioned(render_type rt)
                 // rule number one below.
                 if(el->css().get_margins().left.is_predefined())
                 {
-                    el->m_margins.left = 0;
+                    el->edit_margins().left = 0;
                 }
                 if(el->css().get_margins().right.is_predefined())
                 {
-                    el->m_margins.right = 0;
+                    el->edit_margins().right = 0;
                 }
                 width = el->width();
                 left  = el_static_x - el->content_offset_left();
@@ -826,13 +842,13 @@ void litehtml::render_item::render_positioned(render_type rt)
                     // constraint that the two margins get equal values, unless this would make them negative,
                     // in which case when direction of the containing block is 'ltr' ('rtl'), set 'margin-left'
                     // ('margin-right') to zero and solve for 'margin-right' ('margin-left').
-                    el->m_margins.left = el->m_margins.right = remained / 2_px;
-                    if(el->m_margins.left < 0_px)
+                    el->edit_margins().left = el->edit_margins().right = remained / 2_px;
+                    if(el->edit_margins().left < 0_px)
                     {
-                        el->m_margins.left  = 0;
-                        el->m_margins.right = remained;
+                        el->edit_margins().left  = 0;
+                        el->edit_margins().right = remained;
                     }
-                    width += el->m_margins.left + el->m_margins.right;
+                    width += el->edit_margins().left + el->edit_margins().right;
                 } else
                 {
                     // If one of 'margin-left' or 'margin-right' is 'auto', solve the equation
@@ -841,13 +857,13 @@ void litehtml::render_item::render_positioned(render_type rt)
                     // 'direction' is 'ltr') and solve for that value.
                     if(el->css().get_margins().left.is_predefined())
                     {
-                        el->m_margins.left  = remained;
-                        width              += el->m_margins.left;
+                        el->edit_margins().left  = remained;
+                        width              += el->edit_margins().left;
                     }
                     if(el->css().get_margins().right.is_predefined())
                     {
-                        el->m_margins.right  = remained;
-                        width               += el->m_margins.right;
+                        el->edit_margins().right  = remained;
+                        width               += el->edit_margins().right;
                     }
                 }
             }
@@ -1112,14 +1128,14 @@ void litehtml::render_item::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, co
             clip_box.x          += x;
             clip_box.y          += y;
             position border_box  = clip_box;
-            border_box          += m_padding;
-            border_box          += m_borders;
+            border_box          += box_padding();
+            border_box          += box_borders();
 
             border_radiuses bdr_radius =
                 src_el()->css().get_borders().radius.calc_percents(border_box.width, border_box.height);
 
-            bdr_radius -= m_borders;
-            bdr_radius -= m_padding;
+            bdr_radius -= box_borders();
+            bdr_radius -= box_padding();
 
             doc->container()->set_clip(clip_box, bdr_radius);
         }
@@ -1470,8 +1486,8 @@ bool litehtml::render_item::is_point_inside(pixel_t x, pixel_t y) const
 {
     position pos = m_pos;
 
-    pos += m_padding;
-    pos += m_borders;
+    pos += box_padding();
+    pos += box_borders();
     return pos.is_point_inside(x, y);
 }
 
@@ -1518,8 +1534,8 @@ void litehtml::render_item::get_rendering_boxes(const std::function<void(const p
     if(!inline_processed)
     {
         position pos  = m_pos;
-        pos          += m_padding;
-        pos          += m_borders;
+        pos          += box_padding();
+        pos          += box_borders();
         pos.x        += add_x;
         pos.y        += add_y;
         redraw_box(pos);
@@ -1775,8 +1791,8 @@ std::tuple<litehtml::pixel_t, litehtml::pixel_t> litehtml::render_item::element_
         offset_y += this_el->m_pos.y;
     } else
     {
-        offset_x += m_padding.left;
-        offset_y += m_padding.top;
+        offset_x += box_padding().left;
+        offset_y += box_padding().top;
     }
 
     return {offset_x, offset_y};

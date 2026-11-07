@@ -19,9 +19,13 @@ namespace litehtml
     class element;
     class render_item;
 
-    // Members that few render items use. Allocated on first use.
+    // Members that few render items use. Allocated on first use. Text items and most inline items have all-zero
+    // margins, padding and borders and never allocate it.
     struct render_item_extra
     {
+        margins                                   margins_box;
+        margins                                   padding_box;
+        margins                                   borders_box;
         std::vector<std::shared_ptr<render_item>> positioned;
         std::shared_ptr<scroll_view>              scroll;
     };
@@ -51,10 +55,65 @@ namespace litehtml
             }
             return *m_extra;
         }
+        static const margins& zero_margins()
+        {
+            static const margins zero{};
+            return zero;
+        }
 
-        margins  m_margins;
-        margins  m_padding;
-        margins  m_borders;
+      public:
+        // Read access to margins, padding and borders; all zero when the extra block is absent
+        const margins& box_margins() const
+        {
+            return m_extra ? m_extra->margins_box : zero_margins();
+        }
+        const margins& box_padding() const
+        {
+            return m_extra ? m_extra->padding_box : zero_margins();
+        }
+        const margins& box_borders() const
+        {
+            return m_extra ? m_extra->borders_box : zero_margins();
+        }
+        // Write access; allocates the extra block
+        margins& edit_margins()
+        {
+            return extra().margins_box;
+        }
+        margins& edit_padding()
+        {
+            return extra().padding_box;
+        }
+        margins& edit_borders()
+        {
+            return extra().borders_box;
+        }
+        static bool is_zero(const margins& m)
+        {
+            // exact comparison: pixel_t == uses an epsilon
+            return m.left.value() == 0.0f && m.right.value() == 0.0f && m.top.value() == 0.0f &&
+                   m.bottom.value() == 0.0f;
+        }
+        // Store all three; allocates only when a value is non-zero or the block exists
+        void set_box(const margins& mrg, const margins& pad, const margins& brd)
+        {
+            if(m_extra || !is_zero(mrg) || !is_zero(pad) || !is_zero(brd))
+            {
+                auto& ex       = extra();
+                ex.margins_box = mrg;
+                ex.padding_box = pad;
+                ex.borders_box = brd;
+            }
+        }
+        void set_margins(const margins& mrg)
+        {
+            if(m_extra || !is_zero(mrg))
+            {
+                extra().margins_box = mrg;
+            }
+        }
+
+      protected:
         position m_pos;
         size     m_intrinsic_min_size;
         size     m_intrinsic_max_size;
@@ -180,25 +239,25 @@ namespace litehtml
         // Element left (including margins, padding, and borders)
         pixel_t left() const
         {
-            return m_pos.left() - m_margins.left - m_padding.left - m_borders.left;
+            return m_pos.left() - box_margins().left - box_padding().left - box_borders().left;
         }
 
         // Element left (excluding margins, but including padding and borders)
         pixel_t content_left() const
         {
-            return m_pos.left() - m_padding.left - m_borders.left;
+            return m_pos.left() - box_padding().left - box_borders().left;
         }
 
         // Element top (including margins, padding, and borders)
         pixel_t top() const
         {
-            return m_pos.top() - m_margins.top - m_padding.top - m_borders.top;
+            return m_pos.top() - box_margins().top - box_padding().top - box_borders().top;
         }
 
         // Element top (excluding margins, but including padding and borders)
         pixel_t content_top() const
         {
-            return m_pos.top() - m_padding.top - m_borders.top;
+            return m_pos.top() - box_padding().top - box_borders().top;
         }
 
         // Element bottom (including margins, padding, and borders)
@@ -216,85 +275,85 @@ namespace litehtml
         // Element height (including margins, padding, and borders)
         pixel_t height() const
         {
-            return m_pos.height + m_margins.height() + m_padding.height() + m_borders.height();
+            return m_pos.height + box_margins().height() + box_padding().height() + box_borders().height();
         }
 
         // Element height (excluding margins, but including padding and borders)
         pixel_t content_height() const
         {
-            return m_pos.height + m_padding.height() + m_borders.height();
+            return m_pos.height + box_padding().height() + box_borders().height();
         }
 
         // Element width (including margins, padding, and borders)
         pixel_t width() const
         {
-            return m_pos.width + m_margins.width() + m_padding.width() + m_borders.width();
+            return m_pos.width + box_margins().width() + box_padding().width() + box_borders().width();
         }
 
         // Element width (excluding margins, but including padding and borders)
         pixel_t content_width() const
         {
-            return m_pos.width + m_padding.width() + m_borders.width();
+            return m_pos.width + box_padding().width() + box_borders().width();
         }
 
         pixel_t padding_top() const
         {
-            return m_padding.top;
+            return box_padding().top;
         }
 
         pixel_t padding_bottom() const
         {
-            return m_padding.bottom;
+            return box_padding().bottom;
         }
 
         pixel_t padding_left() const
         {
-            return m_padding.left;
+            return box_padding().left;
         }
 
         pixel_t padding_right() const
         {
-            return m_padding.right;
+            return box_padding().right;
         }
 
         pixel_t border_top() const
         {
-            return m_borders.top;
+            return box_borders().top;
         }
 
         pixel_t border_bottom() const
         {
-            return m_borders.bottom;
+            return box_borders().bottom;
         }
 
         pixel_t border_left() const
         {
-            return m_borders.left;
+            return box_borders().left;
         }
 
         pixel_t border_right() const
         {
-            return m_borders.right;
+            return box_borders().right;
         }
 
         pixel_t margin_top() const
         {
-            return m_margins.top;
+            return box_margins().top;
         }
 
         pixel_t margin_bottom() const
         {
-            return m_margins.bottom;
+            return box_margins().bottom;
         }
 
         pixel_t margin_left() const
         {
-            return m_margins.left;
+            return box_margins().left;
         }
 
         pixel_t margin_right() const
         {
-            return m_margins.right;
+            return box_margins().right;
         }
 
         std::shared_ptr<render_item> parent() const
@@ -302,24 +361,27 @@ namespace litehtml
             return m_parent.lock();
         }
 
-        margins& get_margins()
+        const margins& get_margins() const
         {
-            return m_margins;
+            return box_margins();
         }
 
-        margins& get_paddings()
+        const margins& get_paddings() const
         {
-            return m_padding;
+            return box_padding();
         }
 
         void set_paddings(const margins& val)
         {
-            m_padding = val;
+            if(m_extra || !is_zero(val))
+            {
+                edit_padding() = val;
+            }
         }
 
-        margins& get_borders()
+        const margins& get_borders() const
         {
-            return m_borders;
+            return box_borders();
         }
 
         /**
@@ -327,7 +389,7 @@ namespace litehtml
          */
         pixel_t content_offset_top() const
         {
-            return m_margins.top + m_padding.top + m_borders.top;
+            return box_margins().top + box_padding().top + box_borders().top;
         }
 
         /**
@@ -335,7 +397,7 @@ namespace litehtml
          */
         pixel_t content_offset_bottom() const
         {
-            return m_margins.bottom + m_padding.bottom + m_borders.bottom;
+            return box_margins().bottom + box_padding().bottom + box_borders().bottom;
         }
 
         /**
@@ -343,7 +405,7 @@ namespace litehtml
          */
         pixel_t content_offset_left() const
         {
-            return m_margins.left + m_padding.left + m_borders.left;
+            return box_margins().left + box_padding().left + box_borders().left;
         }
 
         /**
@@ -351,7 +413,7 @@ namespace litehtml
          */
         pixel_t content_offset_right() const
         {
-            return m_margins.right + m_padding.right + m_borders.right;
+            return box_margins().right + box_padding().right + box_borders().right;
         }
 
         /**
@@ -374,18 +436,18 @@ namespace litehtml
         {
             if(css().get_box_sizing() == box_sizing_content_box)
             {
-                return m_margins.left + m_borders.left + m_padding.left;
+                return box_margins().left + box_borders().left + box_padding().left;
             }
-            return m_margins.left;
+            return box_margins().left;
         }
 
         pixel_t render_offset_right() const
         {
             if(css().get_box_sizing() == box_sizing_content_box)
             {
-                return m_margins.right + m_borders.right + m_padding.right;
+                return box_margins().right + box_borders().right + box_padding().right;
             }
-            return m_margins.right;
+            return box_margins().right;
         }
 
         pixel_t render_offset_width() const
@@ -397,18 +459,18 @@ namespace litehtml
         {
             if(css().get_box_sizing() == box_sizing_content_box)
             {
-                return m_margins.top + m_borders.top + m_padding.top;
+                return box_margins().top + box_borders().top + box_padding().top;
             }
-            return m_margins.top;
+            return box_margins().top;
         }
 
         pixel_t render_offset_bottom() const
         {
             if(css().get_box_sizing() == box_sizing_content_box)
             {
-                return m_margins.bottom + m_borders.bottom + m_padding.bottom;
+                return box_margins().bottom + box_borders().bottom + box_padding().bottom;
             }
-            return m_margins.bottom;
+            return box_margins().bottom;
         }
 
         pixel_t render_offset_height() const
@@ -420,7 +482,7 @@ namespace litehtml
         {
             if(css().get_box_sizing() == box_sizing_border_box)
             {
-                return m_padding.left + m_borders.left;
+                return box_padding().left + box_borders().left;
             }
             return 0_px;
         }
@@ -429,7 +491,7 @@ namespace litehtml
         {
             if(css().get_box_sizing() == box_sizing_border_box)
             {
-                return m_padding.right + m_borders.right;
+                return box_padding().right + box_borders().right;
             }
             return 0_px;
         }
@@ -443,7 +505,7 @@ namespace litehtml
         {
             if(css().get_box_sizing() == box_sizing_border_box)
             {
-                return m_padding.top + m_borders.top;
+                return box_padding().top + box_borders().top;
             }
             return 0_px;
         }
@@ -452,7 +514,7 @@ namespace litehtml
         {
             if(css().get_box_sizing() == box_sizing_border_box)
             {
-                return m_padding.bottom + m_borders.bottom;
+                return box_padding().bottom + box_borders().bottom;
             }
             return 0_px;
         }
@@ -490,15 +552,15 @@ namespace litehtml
 
         bool collapse_top_margin() const
         {
-            return m_borders.top == 0_px && m_padding.top == 0_px && m_element->in_normal_flow() &&
-                   m_element->css().get_float() == float_none && m_margins.top >= 0_px && !is_flex_item() &&
+            return box_borders().top == 0_px && box_padding().top == 0_px && m_element->in_normal_flow() &&
+                   m_element->css().get_float() == float_none && box_margins().top >= 0_px && !is_flex_item() &&
                    !is_root() && !is_one_of(css().get_overflow(), overflow_hidden, overflow_scroll, overflow_auto);
         }
 
         bool collapse_bottom_margin() const
         {
-            return m_borders.bottom == 0_px && m_padding.bottom == 0_px && m_element->in_normal_flow() &&
-                   m_element->css().get_float() == float_none && m_margins.bottom >= 0_px && !is_root() &&
+            return box_borders().bottom == 0_px && box_padding().bottom == 0_px && m_element->in_normal_flow() &&
+                   m_element->css().get_float() == float_none && box_margins().bottom >= 0_px && !is_root() &&
                    !is_one_of(css().get_overflow(), overflow_hidden, overflow_scroll, overflow_auto);
         }
 

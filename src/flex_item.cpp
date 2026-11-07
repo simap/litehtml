@@ -240,12 +240,12 @@ void litehtml::flex_item_row_direction::apply_main_auto_margins()
     // apply auto margins to item
     if(!auto_margin_main_start.is_default())
     {
-        el->get_margins().left  = auto_margin_main_start;
+        el->edit_margins().left  = auto_margin_main_start;
         el->pos().x            += auto_margin_main_start;
     }
     if(!auto_margin_main_end.is_default())
     {
-        el->get_margins().right = auto_margin_main_end;
+        el->edit_margins().right = auto_margin_main_end;
     }
 }
 
@@ -265,12 +265,12 @@ bool litehtml::flex_item_row_direction::apply_cross_auto_margins(pixel_t cross_s
         pixel_t margin = (cross_size - el->height()) / pixel_t(margins_num);
         if(auto_margin_cross_start)
         {
-            el->get_margins().top = margin;
+            el->edit_margins().top = margin;
             el->pos().y           = el->content_offset_top();
         }
         if(auto_margin_cross_end)
         {
-            el->get_margins().bottom = margin;
+            el->edit_margins().bottom = margin;
         }
         return true;
     }
@@ -472,12 +472,12 @@ void litehtml::flex_item_column_direction::apply_main_auto_margins()
     // apply auto margins to item
     if(!auto_margin_main_start.is_default())
     {
-        el->get_margins().top  = auto_margin_main_start;
+        el->edit_margins().top  = auto_margin_main_start;
         el->pos().y           += auto_margin_main_start;
     }
     if(!auto_margin_main_end.is_default())
     {
-        el->get_margins().bottom = auto_margin_main_end;
+        el->edit_margins().bottom = auto_margin_main_end;
     }
 }
 
@@ -497,12 +497,12 @@ bool litehtml::flex_item_column_direction::apply_cross_auto_margins(pixel_t cros
         pixel_t margin = (cross_size - el->width()) / pixel_t(margins_num);
         if(auto_margin_cross_start)
         {
-            el->get_margins().left  = margin;
+            el->edit_margins().left  = margin;
             el->pos().x            += el->content_offset_left();
         }
         if(auto_margin_cross_end)
         {
-            el->get_margins().right = margin;
+            el->edit_margins().right = margin;
         }
     }
     return false;
