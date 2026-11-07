@@ -739,11 +739,14 @@ static void copy_over_original_tag_text(GumboParser* parser,
   utf8iterator_get_position(&tokenizer->_input, end_pos);
 }
 
-// Releases and then re-initializes the tag buffer.
+// Empties the tag buffer for the next name or value of the same tag. The
+// buffer keeps its storage until the tag is emitted or abandoned; releasing
+// and allocating it again for every attribute name and value was most of the
+// parser's allocations.
 static void reinitialize_tag_buffer(GumboParser* parser) {
-  gumbo_parser_deallocate(
-      parser, parser->_tokenizer_state->_tag_state._buffer.data);
-  initialize_tag_buffer(parser);
+  gumbo_string_buffer_clear(
+      parser, &parser->_tokenizer_state->_tag_state._buffer);
+  reset_tag_buffer_start_point(parser);
 }
 
 // Moves some data from the temporary buffer over the the tag-based fields in
