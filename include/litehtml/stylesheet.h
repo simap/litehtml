@@ -58,6 +58,8 @@ namespace litehtml
         css_token        block;
     };
 
+    class css_parser;
+
     class css
     {
         css_selector::vector m_selectors;
@@ -68,13 +70,21 @@ namespace litehtml
             return m_selectors;
         }
 
-        template <class Input>
-        void parse_css_stylesheet(const Input& input, const std::string& baseurl, const std::shared_ptr<document>& doc,
-                                  const media_query_list_list::ptr& media = nullptr, bool top_level = true);
+        // Input is either the stylesheet text, which is tokenized while it is parsed, or the component values
+        // of a block (@media, @supports, @layer). Each top-level rule is interpreted as soon as it is consumed and
+        // then dropped, so neither the token stream nor the rule list of a whole stylesheet is held at once.
+        void parse_css_stylesheet(const std::string& input, const std::string& baseurl,
+                                  const std::shared_ptr<document>& doc, const media_query_list_list::ptr& media = nullptr,
+                                  bool top_level = true);
+        void parse_css_stylesheet(const css_token_vector& input, const std::string& baseurl,
+                                  const std::shared_ptr<document>& doc, const media_query_list_list::ptr& media = nullptr,
+                                  bool top_level = true);
 
         void sort_selectors();
 
       private:
+        void parse_rules(css_parser& parser, const std::string& baseurl, const std::shared_ptr<document>& doc,
+                         const media_query_list_list::ptr& media, bool top_level);
         bool parse_style_rule(const raw_rule::ptr& rule, const std::string& baseurl,
                               const std::shared_ptr<document>& doc, const media_query_list_list::ptr& media);
         void parse_import_rule(const raw_rule::ptr& rule, const std::string& baseurl,

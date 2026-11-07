@@ -139,7 +139,7 @@ namespace litehtml
             m_root->parse_attributes();
 
             // parse style sheets linked in document
-            for(const auto& css : m_css)
+            for(auto& css : m_css)
             {
                 media_query_list_list::ptr media;
                 if(css.media != "")
@@ -149,6 +149,8 @@ namespace litehtml
                     media->add(mq_list);
                 }
                 m_styles.parse_css_stylesheet(css.text, css.baseurl, shared_from_this(), media);
+                // the source text is not used after parsing; free it before styles are applied and computed
+                std::string().swap(css.text);
             }
             // Sort css selectors using CSS rules.
             m_styles.sort_selectors();

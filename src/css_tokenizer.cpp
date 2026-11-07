@@ -845,7 +845,7 @@ namespace litehtml
             {
                 break;
             }
-            tokens.push_back(token);
+            tokens.push_back(std::move(token));
         }
         return tokens;
     }

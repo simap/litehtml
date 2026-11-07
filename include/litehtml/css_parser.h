@@ -8,26 +8,60 @@
 namespace litehtml
 {
 
+    // Decode (UTF-8) and filter code points. Returns input itself when both steps are no-ops, which is the
+    // common case, otherwise fills storage and returns it.
+    // https://www.w3.org/TR/css-syntax-3/#parse-stylesheet steps 1 and 2 (before tokenization)
+    const std::string& prepare_css_input(const std::string& input, std::string& storage);
+
     class css_parser
     {
-        // EXP: reference instead of a copy of the whole token stream
-        const css_token_vector& m_tokens;
-        int                     m_index = 0;
+        // Token source: either a token vector (m_tokens) or a tokenizer that is pulled one token at a time
+        // (m_tokenizer), so that the token stream of a whole stylesheet never exists at once.
+        const css_token_vector* m_tokens    = nullptr;
+        int                     m_index     = 0;
+        css_tokenizer*          m_tokenizer = nullptr;
+        css_token               m_current;           // stream mode: the current input token
+        bool                    m_reconsume = false; // stream mode: next_token returns m_current again
+        // Stream mode, nested stylesheet blocks (@media {...} parsed straight from the stream):
+        int                     m_depth         = 0;     // number of simple blocks and functions being consumed
+        int                     m_end_depth     = -1;    // at this depth a '}' ends the input (reads as EOF)
+        bool                    m_block_pending = false; // an at-rule's '{' was consumed but not its block
 
-        css_token next_token();
-        css_token peek_token();
+        // The returned reference is valid until the next call of next_token or peek_token.
+        const css_token& next_token();
+        const css_token& peek_token();
+        // https://www.w3.org/TR/css-syntax-3/#reconsume-the-current-input-token
+        void reconsume();
 
       public:
         css_parser(const css_token_vector& tokens) :
-            m_tokens(tokens)
+            m_tokens(&tokens)
+        {
+        }
+        css_parser(css_tokenizer& tokenizer) :
+            m_tokenizer(&tokenizer)
         {
         }
 
         static raw_rule::vector parse_stylesheet(const std::string& input, bool top_level);
         static raw_rule::vector parse_stylesheet(const css_token_vector& input, bool top_level);
         raw_rule::vector        consume_list_of_rules(bool top_level);
+        // One step of consume_list_of_rules. Returns false at EOF. Otherwise rule is the consumed rule, or null
+        // when the input produced none (whitespace, CDO/CDC at top level, an invalid qualified rule).
+        // defer_blocks (stream mode only): an at-rule's {} block is left in the stream and block_pending() is
+        // true. The caller must then either skip_block(), or begin_block(), consume the block contents as a list
+        // of rules (consume_rule until it returns false), and end_block(). The block's component values are
+        // never stored, which is the same result as consuming the block and parsing its value.
+        bool                    consume_rule(bool top_level, raw_rule::ptr& rule, bool defer_blocks = false);
+        bool                    block_pending() const
+        {
+            return m_block_pending;
+        }
+        void                    skip_block();
+        int                     begin_block();
+        void                    end_block(int saved);
         raw_rule::ptr           consume_qualified_rule();
-        raw_rule::ptr           consume_at_rule();
+        raw_rule::ptr           consume_at_rule(bool defer_block = false);
         css_token               consume_simple_block(char opening_bracket);
         css_token               consume_component_value();
         css_token               consume_function(const std::string& name);

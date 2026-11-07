@@ -120,7 +120,11 @@ namespace litehtml
             }
         }
 
-        css_token& operator=(const css_token& token) = default;
+        // The user-declared copy constructor suppresses the implicit move operations, so every vector growth
+        // and every return by value copied the strings. Declare them explicitly.
+        css_token(css_token&& token) noexcept            = default;
+        css_token& operator=(const css_token& token)     = default;
+        css_token& operator=(css_token&& token) noexcept = default;
 
         bool is_component_value() const
         {
@@ -183,16 +187,22 @@ namespace litehtml
     class css_tokenizer
     {
       public:
+        // input is referenced, not copied; it must outlive the tokenizer
         css_tokenizer(const std::string& input) :
             str(input)
         {
         }
 
         css_token_vector tokenize();
+        // Pull interface: the next token, or an EOF token (repeatedly) at the end of input.
+        css_token next_token()
+        {
+            return consume_token();
+        }
 
       private:
         // Input stream. Valid UTF-8; no NUL bytes. https://www.w3.org/TR/css-syntax-3/#input-stream
-        std::string str;
+        const std::string& str;
 
         // Index of the next input char.  https://www.w3.org/TR/css-syntax-3/#next-input-code-point
         int index = 0;
