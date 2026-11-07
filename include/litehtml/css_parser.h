@@ -10,14 +10,14 @@ namespace litehtml
 
     class css_parser
     {
-        css_token_vector m_tokens;
-        int              m_index = 0;
+        // EXP: reference instead of a copy of the whole token stream
+        const css_token_vector& m_tokens;
+        int                     m_index = 0;
 
         css_token next_token();
         css_token peek_token();
 
       public:
-        css_parser() = default;
         css_parser(const css_token_vector& tokens) :
             m_tokens(tokens)
         {

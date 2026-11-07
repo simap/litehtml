@@ -139,7 +139,7 @@ namespace litehtml
             }
             result.push_back(tok);
         }
-        tokens = result;
+        tokens = std::move(result); // EXP
     }
 
     // https://www.w3.org/TR/css-syntax-3/#normalize-into-a-token-stream
@@ -159,7 +159,7 @@ namespace litehtml
     {
         filter_code_points(input);
         auto tokens = tokenize(input);
-        return normalize(tokens, options, keep_whitespace);
+        return normalize(std::move(tokens), options, keep_whitespace); // EXP
     }
 
     // https://www.w3.org/TR/css-syntax-3/#parse-stylesheet

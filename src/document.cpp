@@ -82,8 +82,14 @@ namespace litehtml
 
         // Destroy GumboOutput
         gumbo_destroy_output(&kGumboDefaultOptions, output);
+        // EXP: the HTML copy is only needed while gumbo output is alive
+        doc->m_text.clear();
+        doc->m_text.shrink_to_fit();
 
         doc->finalize_from_external_root(root, master_styles, user_styles);
+        // EXP: stylesheet source text copies are parsed by now
+        doc->m_css.clear();
+        doc->m_css.shrink_to_fit();
 
         return doc;
     }
@@ -341,7 +347,7 @@ namespace litehtml
                             ret = create_element(str.c_str(), attrs);
                         }
                     }
-                    if(!strcmp(tag, "script"))
+                    if(!strcmp(tag, "script") || !strcmp(tag, "style")) // EXP: style text as one node
                     {
                         parseTextNode = false;
                     }
@@ -403,10 +409,19 @@ namespace litehtml
         case GUMBO_NODE_WHITESPACE:
             {
                 std::string str = node->v.text.text;
-                for(size_t i = 0; i < str.length(); i++)
+                // EXP: one el_space per whitespace-only node, except where newlines can matter
+                const GumboNode* par = node->parent;
+                bool keep = par && par->type == GUMBO_NODE_ELEMENT &&
+                            (par->v.element.tag == GUMBO_TAG_PRE || par->v.element.tag == GUMBO_TAG_TEXTAREA ||
+                             par->v.element.tag == GUMBO_TAG_LISTING || par->v.element.tag == GUMBO_TAG_PLAINTEXT);
+                if(!keep)
                 {
-                    elements.push_back(std::make_shared<el_space>(str.substr(i, 1).c_str(), shared_from_this()));
-                }
+                    elements.push_back(std::make_shared<el_space>(str.c_str(), shared_from_this()));
+                } else
+                    for(size_t i = 0; i < str.length(); i++)
+                    {
+                        elements.push_back(std::make_shared<el_space>(str.substr(i, 1).c_str(), shared_from_this()));
+                    }
             }
             break;
         default:
