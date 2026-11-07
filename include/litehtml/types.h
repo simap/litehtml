@@ -21,7 +21,8 @@ namespace litehtml
     class element;
 
     using string_map    = std::map<std::string, std::string>;
-    using elements_list = std::list<std::shared_ptr<element>>;
+    // a vector, not a list: one heap block per parent instead of one list node per child
+    using elements_list = std::vector<std::shared_ptr<element>>;
     using int_vector    = std::vector<int>;
     using string_vector = std::vector<std::string>;
     using pixel_vector  = std::vector<pixel_t>;
