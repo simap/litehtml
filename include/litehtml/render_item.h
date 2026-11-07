@@ -12,6 +12,7 @@
 #include "formatting_context.h"
 #include "element.h"
 #include "scroll_view.h"
+#include "render_item_list.h"
 
 namespace litehtml
 {
@@ -30,7 +31,7 @@ namespace litehtml
       protected:
         std::shared_ptr<element>                  m_element;
         std::weak_ptr<render_item>                m_parent;
-        std::list<std::shared_ptr<render_item>>   m_children;
+        render_item_list                          m_children;
         std::unique_ptr<render_item_extra>        m_extra;
 
         scroll_view* scroller() const
@@ -132,7 +133,7 @@ namespace litehtml
             return sv ? sv->is_v_scrollable(dy) : false;
         }
 
-        std::list<std::shared_ptr<render_item>>& children()
+        render_item_list& children()
         {
             return m_children;
         }

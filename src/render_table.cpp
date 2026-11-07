@@ -352,6 +352,7 @@ std::shared_ptr<litehtml::render_item> litehtml::render_item_table::init()
 
     row_iter.process(shared_from_this(), [&](std::shared_ptr<render_item>& el, iterator_item_type /*item_type*/) {
         m_grid->begin_row(el);
+        el->children().shrink_to_fit(); // rows do not run render_item::init
 
         elements_iterator cell_iter(true, &table_selector, &cell_selector);
         cell_iter.process(el, [&](std::shared_ptr<render_item>& el, iterator_item_type item_type) {

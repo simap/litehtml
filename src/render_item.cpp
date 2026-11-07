@@ -1594,6 +1594,7 @@ std::shared_ptr<litehtml::render_item> litehtml::render_item::init()
     {
         el = el->init();
     }
+    m_children.shrink_to_fit();
 
     return shared_from_this();
 }
