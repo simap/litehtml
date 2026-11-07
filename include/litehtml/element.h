@@ -16,6 +16,80 @@ namespace litehtml
     class dumper;
     class render_item;
 
+    // The render items of an element, in insertion order. Almost every element has zero or one, so the first is
+    // stored inline and further ones in a vector allocated on demand. It replaces a std::list, which cost one heap
+    // node per render item.
+    class render_item_refs
+    {
+        using ref = std::weak_ptr<render_item>;
+
+        ref                               m_first;
+        std::unique_ptr<std::vector<ref>> m_more;
+
+      public:
+        class const_iterator
+        {
+            const render_item_refs* m_refs;
+            size_t                  m_idx;
+
+          public:
+            const_iterator(const render_item_refs* refs, size_t idx) :
+                m_refs(refs),
+                m_idx(idx)
+            {
+            }
+            const ref& operator*() const
+            {
+                return m_idx == 0 ? m_refs->m_first : (*m_refs->m_more)[m_idx - 1];
+            }
+            const_iterator& operator++()
+            {
+                ++m_idx;
+                return *this;
+            }
+            bool operator!=(const const_iterator& other) const
+            {
+                return m_idx != other.m_idx;
+            }
+        };
+
+        bool empty() const
+        {
+            // true when m_first was never assigned (shares ownership with nothing)
+            return !m_first.owner_before(ref{}) && !ref{}.owner_before(m_first);
+        }
+        size_t size() const
+        {
+            return empty() ? 0 : 1 + (m_more ? m_more->size() : 0);
+        }
+        const ref& front() const
+        {
+            return m_first;
+        }
+        void push_back(const std::shared_ptr<render_item>& ri)
+        {
+            if(empty())
+            {
+                m_first = ri;
+            } else
+            {
+                if(!m_more)
+                {
+                    m_more = std::make_unique<std::vector<ref>>();
+                }
+                m_more->emplace_back(ri);
+            }
+        }
+        const_iterator begin() const
+        {
+            return {this, 0};
+        }
+        const_iterator end() const
+        {
+            return {this, size()};
+        }
+    };
+
     class element : public std::enable_shared_from_this<element>
     {
         friend class line_box;
@@ -33,7 +107,7 @@ namespace litehtml
         std::weak_ptr<document>               m_doc;
         elements_list                         m_children;
         const css_properties*                 m_css; // interned, owned by the document (see set_css)
-        std::list<std::weak_ptr<render_item>> m_renders;
+        render_item_refs                      m_renders;
         used_selector::vector                 m_used_styles;
 
         virtual void select_all(const css_selector& selector, elements_list& res);
