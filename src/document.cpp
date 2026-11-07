@@ -39,6 +39,14 @@ extern "C" void litehtml_parse_probe(const char* stage);
 
 namespace litehtml
 {
+    // Gumbo records every parse error by default (max_errors -1): a GumboError plus a copy of the
+    // open element stack each. litehtml never reads output->errors, so record none.
+    static GumboOptions gumbo_parse_options()
+    {
+        GumboOptions opts = kGumboDefaultOptions;
+        opts.max_errors   = 0;
+        return opts;
+    }
 
     document::document(document_container* container)
     {
@@ -92,7 +100,8 @@ namespace litehtml
         LH_PROBE("p3_create_node");
 
         // Destroy GumboOutput
-        gumbo_destroy_output(&kGumboDefaultOptions, output);
+        GumboOptions opts = gumbo_parse_options();
+        gumbo_destroy_output(&opts, output);
         LH_PROBE("p4_gumbo_destroyed");
         // EXP: the HTML copy is only needed while gumbo output is alive
         doc->m_text.clear();
@@ -295,7 +304,8 @@ namespace litehtml
 
         // Using gumbo_parse_with_options to pass string length (m_text may contain NUL chars).
         LH_PROBE("p1_before_gumbo");
-        GumboOutput* output = gumbo_parse_with_options(&kGumboDefaultOptions, m_text.data(), m_text.size());
+        GumboOptions opts   = gumbo_parse_options();
+        GumboOutput* output = gumbo_parse_with_options(&opts, m_text.data(), m_text.size());
         LH_PROBE("p2_gumbo_parsed");
 
         if(str.confidence == confidence::certain)
@@ -314,7 +324,7 @@ namespace litehtml
             if(new_encoding != str.encoding)
             {
                 // ...reparse with the new encoding.
-                gumbo_destroy_output(&kGumboDefaultOptions, output);
+                gumbo_destroy_output(&opts, output);
                 m_text.clear();
 
                 if(new_encoding == encoding::utf_8)
@@ -324,7 +334,7 @@ namespace litehtml
                 {
                     decode(str, new_encoding, m_text);
                 }
-                output = gumbo_parse_with_options(&kGumboDefaultOptions, m_text.data(), m_text.size());
+                output = gumbo_parse_with_options(&opts, m_text.data(), m_text.size());
             }
         }
 
@@ -1200,7 +1210,7 @@ namespace litehtml
             return;
         }
 
-        GumboOptions opts = kGumboDefaultOptions;
+        GumboOptions opts = gumbo_parse_options();
         // This is require to prevent creating html, head, body tags around the fragment
         // Although Gumbo always creates html tag anyway. We have to ignore it in create_node.
         opts.fragment_context = GUMBO_TAG_BODY;
@@ -1213,7 +1223,7 @@ namespace litehtml
         create_node(output->root, child_elements, true, false);
 
         // Destroy GumboOutput
-        gumbo_destroy_output(&kGumboDefaultOptions, output);
+        gumbo_destroy_output(&opts, output);
 
         auto parent_render = parent.get_render_item();
 

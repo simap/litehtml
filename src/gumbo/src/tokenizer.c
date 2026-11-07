@@ -762,6 +762,9 @@ static void add_duplicate_attr_error(GumboParser* parser, const char* attr_name,
     int original_index, int new_index) {
   GumboError* error = gumbo_add_error(parser);
   if (!error) {
+    // The duplicate name must still leave the tag buffer, or the next attribute name is appended to
+    // it. Without this, max_errors >= 0 changes the parse.
+    reinitialize_tag_buffer(parser);
     return;
   }
   GumboTagState* tag_state = &parser->_tokenizer_state->_tag_state;
