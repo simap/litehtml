@@ -3,6 +3,36 @@
 
 namespace litehtml
 {
+    namespace
+    {
+        // "\0\0" "\x01\0" ... "\x7f\0": every one-byte ASCII string, and the empty string at offset 0
+        struct single_bytes
+        {
+            char c[256];
+            constexpr single_bytes() :
+                c()
+            {
+                for(int i = 0; i < 128; i++)
+                {
+                    c[2 * i] = static_cast<char>(i);
+                }
+            }
+        };
+        constexpr single_bytes k_single;
+
+        bool is_space_run(const char* s, size_t n)
+        {
+            for(size_t i = 0; i < n; i++)
+            {
+                if(s[i] != ' ' && s[i] != '\t' && s[i] != '\n' && s[i] != '\r' && s[i] != '\f')
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+    } // namespace
+
     char* text_arena::alloc(size_t n)
     {
         m_used += n;
@@ -26,9 +56,32 @@ namespace litehtml
 
     const char* text_arena::add(const char* s, size_t n)
     {
+        if(n == 0)
+        {
+            return k_single.c;
+        }
+        if(n == 1 && static_cast<unsigned char>(s[0]) < 128)
+        {
+            return k_single.c + 2 * s[0];
+        }
+        bool run = n <= max_run && is_space_run(s, n);
+        if(run)
+        {
+            for(const char* r : m_runs)
+            {
+                if(!strncmp(r, s, n) && !r[n])
+                {
+                    return r;
+                }
+            }
+        }
         char* dst = alloc(n + 1);
         memcpy(dst, s, n);
         dst[n] = 0;
+        if(run && m_runs.size() < max_runs)
+        {
+            m_runs.push_back(dst);
+        }
         return dst;
     }
 
