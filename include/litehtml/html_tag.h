@@ -25,7 +25,6 @@ namespace litehtml
       protected:
         string_id              m_tag = empty_id;
         string_id              m_id  = empty_id;
-        string_vector          m_str_classes;
         std::vector<string_id> m_classes;
         style                  m_style;
         // all attributes packed into one string as name\0value\0name\0value\0... (a tag has few attributes)
@@ -53,9 +52,16 @@ namespace litehtml
         {
             return m_classes;
         }
-        const string_vector& str_classes() const
+        // class names as set (lowercased in quirks mode), rebuilt from the class ids
+        string_vector str_classes() const
         {
-            return m_str_classes;
+            string_vector ret;
+            ret.reserve(m_classes.size());
+            for(string_id cls : m_classes)
+            {
+                ret.push_back(_s(cls));
+            }
+            return ret;
         }
 
         void        set_attr(const char* name, const char* val) override;

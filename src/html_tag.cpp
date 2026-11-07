@@ -120,12 +120,15 @@ namespace litehtml
                 {
                     lcase(val);
                 }
-                m_str_classes = split_string(val, whitespace, "", "");
-                m_classes.clear();
-                for(const auto& cls : m_str_classes)
+                // the class names are kept as ids only; str_classes() rebuilds the strings from them
+                string_vector          str_classes = split_string(val, whitespace, "", "");
+                std::vector<string_id> classes;
+                classes.reserve(str_classes.size());
+                for(const auto& cls : str_classes)
                 {
-                    m_classes.push_back(_id(cls));
+                    classes.push_back(_id(cls));
                 }
+                m_classes.swap(classes);
             } else if(name == "id")
             {
                 std::string val = _val;
@@ -156,7 +159,6 @@ namespace litehtml
         }
         if(name == "class")
         {
-            m_str_classes.clear();
             m_classes.clear();
         } else if(name == "id")
         {
@@ -1116,7 +1118,8 @@ namespace litehtml
     bool litehtml::html_tag::set_class(const char* pclass, bool add)
     {
         string_vector classes;
-        bool          changed = false;
+        string_vector cur_classes = str_classes();
+        bool          changed     = false;
 
         split_string(pclass, classes, " ");
 
@@ -1124,9 +1127,9 @@ namespace litehtml
         {
             for(auto& _class : classes)
             {
-                if(std::find(m_str_classes.begin(), m_str_classes.end(), _class) == m_str_classes.end())
+                if(std::find(cur_classes.begin(), cur_classes.end(), _class) == cur_classes.end())
                 {
-                    m_str_classes.push_back(std::move(_class));
+                    cur_classes.push_back(std::move(_class));
                     changed = true;
                 }
             }
@@ -1134,11 +1137,11 @@ namespace litehtml
         {
             for(const auto& _class : classes)
             {
-                auto end = std::remove(m_str_classes.begin(), m_str_classes.end(), _class);
+                auto end = std::remove(cur_classes.begin(), cur_classes.end(), _class);
 
-                if(end != m_str_classes.end())
+                if(end != cur_classes.end())
                 {
-                    m_str_classes.erase(end, m_str_classes.end());
+                    cur_classes.erase(end, cur_classes.end());
                     changed = true;
                 }
             }
@@ -1147,7 +1150,7 @@ namespace litehtml
         if(changed)
         {
             std::string class_string;
-            join_string(class_string, m_str_classes, " ");
+            join_string(class_string, cur_classes, " ");
             set_attr("class", class_string.c_str());
 
             return true;
