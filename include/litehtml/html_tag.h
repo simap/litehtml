@@ -72,6 +72,7 @@ namespace litehtml
         void        apply_stylesheet(const litehtml::css& stylesheet) override;
         void        apply_stylesheets_and_compute(const litehtml::css& author, const litehtml::css& user) override;
         void        refresh_styles() override;
+        void        release_restyle_state(bool keep_attributes) override;
 
         bool is_white_space() const override;
         bool is_body() const override;

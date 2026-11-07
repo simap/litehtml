@@ -25,6 +25,10 @@ namespace litehtml
         std::string dump_get_name() override;
 
         std::shared_ptr<render_item> create_render_item(const std::shared_ptr<render_item>& parent_ri) override;
+        bool                         can_create_render_item() const override
+        {
+            return true; // create_render_item above ignores display
+        }
 
       private:
         //		pixel_t calc_max_height(pixel_t image_height);

@@ -17,6 +17,11 @@ bool litehtml::el_script::appendChild(const ptr& el)
     return true;
 }
 
+void litehtml::el_script::release_source_text()
+{
+    std::string().swap(m_text);
+}
+
 litehtml::string_id litehtml::el_script::tag() const
 {
     return _script_;
