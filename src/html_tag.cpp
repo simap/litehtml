@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 
 #include "html.h"
 #include "document.h"
@@ -92,7 +93,24 @@ namespace litehtml
             std::string name = lowcase(_name);
             // m_attrs has all attribute values, including class and id, in their original case
             // because in attribute selector values are matched case-sensitively even in quirks mode
-            m_attrs[name] = _val;
+            // Rebuilt at exact size. _val may point into m_attrs, so the old buffer is kept in attrs until return.
+            size_t      pos     = find_attr(name.c_str());
+            size_t      val_len = strlen(_val);
+            std::string attrs;
+            if(pos == std::string::npos)
+            {
+                attrs.reserve(m_attrs.size() + name.size() + val_len + 2);
+                attrs.append(m_attrs).append(name).push_back('\0');
+                attrs.append(_val, val_len).push_back('\0');
+            } else
+            {
+                size_t val_pos = pos + name.size() + 1;
+                size_t val_end = val_pos + strlen(m_attrs.c_str() + val_pos) + 1;
+                attrs.reserve(m_attrs.size() - (val_end - val_pos) + val_len + 1);
+                attrs.append(m_attrs, 0, val_pos).append(_val, val_len).push_back('\0');
+                attrs.append(m_attrs, val_end, std::string::npos);
+            }
+            m_attrs.swap(attrs);
 
             if(name == "class")
             {
@@ -102,12 +120,15 @@ namespace litehtml
                 {
                     lcase(val);
                 }
-                m_str_classes = split_string(val, whitespace, "", "");
-                m_classes.clear();
-                for(const auto& cls : m_str_classes)
+                // the class names are kept as ids only; str_classes() rebuilds the strings from them
+                string_vector          str_classes = split_string(val, whitespace, "", "");
+                std::vector<string_id> classes;
+                classes.reserve(str_classes.size());
+                for(const auto& cls : str_classes)
                 {
-                    m_classes.push_back(_id(cls));
+                    classes.push_back(_id(cls));
                 }
+                m_classes.swap(classes);
             } else if(name == "id")
             {
                 std::string val = _val;
@@ -128,10 +149,16 @@ namespace litehtml
             return;
         }
         std::string name = lowcase(_name);
-        m_attrs.erase(name);
+        size_t      pos  = find_attr(name.c_str());
+        if(pos != std::string::npos)
+        {
+            size_t val_pos = pos + name.size() + 1;
+            size_t val_end = val_pos + strlen(m_attrs.c_str() + val_pos) + 1;
+            m_attrs.erase(pos, val_end - pos);
+            m_attrs.shrink_to_fit();
+        }
         if(name == "class")
         {
-            m_str_classes.clear();
             m_classes.clear();
         } else if(name == "id")
         {
@@ -141,12 +168,29 @@ namespace litehtml
 
     const char* html_tag::get_attr(const char* name, const char* def) const
     {
-        auto attr = m_attrs.find(name);
-        if(attr != m_attrs.end())
+        size_t pos = find_attr(name);
+        if(pos != std::string::npos)
         {
-            return attr->second.c_str();
+            return m_attrs.c_str() + pos + strlen(name) + 1;
         }
         return def;
+    }
+
+    size_t html_tag::find_attr(const char* name) const
+    {
+        const char* data = m_attrs.c_str();
+        size_t      pos  = 0;
+        while(pos < m_attrs.size())
+        {
+            size_t name_len = strlen(data + pos);
+            size_t val_pos  = pos + name_len + 1;
+            if(strcmp(data + pos, name) == 0)
+            {
+                return pos;
+            }
+            pos = val_pos + strlen(data + val_pos) + 1;
+        }
+        return std::string::npos;
     }
 
     litehtml::elements_list litehtml::html_tag::select_all(const std::string& selector)
@@ -205,6 +249,37 @@ namespace litehtml
 
     void litehtml::html_tag::apply_stylesheet(const litehtml::css& stylesheet)
     {
+        apply_selectors(stylesheet);
+
+        for(auto& el : m_children)
+        {
+            if(el->css().get_display() != display_inline_text)
+            {
+                el->apply_stylesheet(stylesheet);
+            }
+        }
+    }
+
+    void litehtml::html_tag::apply_stylesheets_and_compute(const litehtml::css& author, const litehtml::css& user)
+    {
+        apply_selectors(author);
+        apply_selectors(user);
+        compute_styles(false);
+
+        for(auto& el : m_children)
+        {
+            if(el->css().get_display() != display_inline_text)
+            {
+                el->apply_stylesheets_and_compute(author, user);
+            } else
+            {
+                el->compute_styles();
+            }
+        }
+    }
+
+    void litehtml::html_tag::apply_selectors(const litehtml::css& stylesheet)
+    {
         for(const auto& sel : stylesheet.selectors())
         {
             // optimization
@@ -229,7 +304,7 @@ namespace litehtml
 
             if(apply != select_no_match)
             {
-                used_selector::ptr us = std::make_unique<used_selector>(sel, false);
+                bool used = false;
 
                 if(sel->is_media_valid())
                 {
@@ -267,7 +342,7 @@ namespace litehtml
                                 add_style(*sel->m_style);
                             }
                         }
-                        us->m_used = true;
+                        used = true;
                     };
 
                     if(apply & select_match_pseudo_class)
@@ -280,7 +355,7 @@ namespace litehtml
                             } else
                             {
                                 add_style(*sel->m_style);
-                                us->m_used = true;
+                                used = true;
                             }
                         }
                     } else if((apply & (select_match_with_after | select_match_with_before)))
@@ -289,18 +364,10 @@ namespace litehtml
                     } else
                     {
                         add_style(*sel->m_style);
-                        us->m_used = true;
+                        used = true;
                     }
                 }
-                m_used_styles.push_back(std::move(us));
-            }
-        }
-
-        for(auto& el : m_children)
-        {
-            if(el->css().get_display() != display_inline_text)
-            {
-                el->apply_stylesheet(stylesheet);
+                m_used_styles.emplace_back(sel.get(), used);
             }
         }
     }
@@ -385,6 +452,12 @@ namespace litehtml
         css_properties computed = *m_css;
         computed.compute(this, doc);
         set_css(computed);
+
+        // every stylesheet has been applied by now; drop the push_back slack of the restyle list
+        m_used_styles.shrink_to_fit();
+        m_children.shrink_to_fit();
+        // the declared values are no longer needed; keep custom properties for descendants' var()
+        m_style.retain_custom_properties();
 
         if(recursive)
         {
@@ -1068,7 +1141,8 @@ namespace litehtml
     bool litehtml::html_tag::set_class(const char* pclass, bool add)
     {
         string_vector classes;
-        bool          changed = false;
+        string_vector cur_classes = str_classes();
+        bool          changed     = false;
 
         split_string(pclass, classes, " ");
 
@@ -1076,9 +1150,9 @@ namespace litehtml
         {
             for(auto& _class : classes)
             {
-                if(std::find(m_str_classes.begin(), m_str_classes.end(), _class) == m_str_classes.end())
+                if(std::find(cur_classes.begin(), cur_classes.end(), _class) == cur_classes.end())
                 {
-                    m_str_classes.push_back(std::move(_class));
+                    cur_classes.push_back(std::move(_class));
                     changed = true;
                 }
             }
@@ -1086,11 +1160,11 @@ namespace litehtml
         {
             for(const auto& _class : classes)
             {
-                auto end = std::remove(m_str_classes.begin(), m_str_classes.end(), _class);
+                auto end = std::remove(cur_classes.begin(), cur_classes.end(), _class);
 
-                if(end != m_str_classes.end())
+                if(end != cur_classes.end())
                 {
-                    m_str_classes.erase(end, m_str_classes.end());
+                    cur_classes.erase(end, cur_classes.end());
                     changed = true;
                 }
             }
@@ -1099,7 +1173,7 @@ namespace litehtml
         if(changed)
         {
             std::string class_string;
-            join_string(class_string, m_str_classes, " ");
+            join_string(class_string, cur_classes, " ");
             set_attr("class", class_string.c_str());
 
             return true;
@@ -1491,56 +1565,56 @@ namespace litehtml
 
         for(auto& usel : m_used_styles)
         {
-            usel->m_used = false;
+            usel.set_used(false);
 
-            if(usel->m_selector->is_media_valid())
+            if(usel.selector().is_media_valid())
             {
-                int apply = select(*usel->m_selector, false);
+                int apply = select(usel.selector(),false);
 
                 if(apply != select_no_match)
                 {
                     if(apply & select_match_pseudo_class)
                     {
-                        if(select(*usel->m_selector, true))
+                        if(select(usel.selector(),true))
                         {
                             if(apply & select_match_with_after)
                             {
-                                element::ptr el = get_element_after(*usel->m_selector->m_style, false);
+                                element::ptr el = get_element_after(*usel.selector().m_style, false);
                                 if(el)
                                 {
-                                    el->add_style(*usel->m_selector->m_style);
+                                    el->add_style(*usel.selector().m_style);
                                 }
                             } else if(apply & select_match_with_before)
                             {
-                                element::ptr el = get_element_before(*usel->m_selector->m_style, false);
+                                element::ptr el = get_element_before(*usel.selector().m_style, false);
                                 if(el)
                                 {
-                                    el->add_style(*usel->m_selector->m_style);
+                                    el->add_style(*usel.selector().m_style);
                                 }
                             } else
                             {
-                                add_style(*usel->m_selector->m_style);
-                                usel->m_used = true;
+                                add_style(*usel.selector().m_style);
+                                usel.set_used(true);
                             }
                         }
                     } else if(apply & select_match_with_after)
                     {
-                        element::ptr el = get_element_after(*usel->m_selector->m_style, false);
+                        element::ptr el = get_element_after(*usel.selector().m_style, false);
                         if(el)
                         {
-                            el->add_style(*usel->m_selector->m_style);
+                            el->add_style(*usel.selector().m_style);
                         }
                     } else if(apply & select_match_with_before)
                     {
-                        element::ptr el = get_element_before(*usel->m_selector->m_style, false);
+                        element::ptr el = get_element_before(*usel.selector().m_style, false);
                         if(el)
                         {
-                            el->add_style(*usel->m_selector->m_style);
+                            el->add_style(*usel.selector().m_style);
                         }
                     } else
                     {
-                        add_style(*usel->m_selector->m_style);
-                        usel->m_used = true;
+                        add_style(*usel.selector().m_style);
+                        usel.set_used(true);
                     }
                 }
             }

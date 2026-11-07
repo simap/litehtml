@@ -25,13 +25,17 @@ namespace litehtml
       protected:
         string_id              m_tag = empty_id;
         string_id              m_id  = empty_id;
-        string_vector          m_str_classes;
         std::vector<string_id> m_classes;
         style                  m_style;
-        string_map             m_attrs;
+        // all attributes packed into one string as name\0value\0name\0value\0... (a tag has few attributes)
+        std::string            m_attrs;
         std::vector<string_id> m_pseudo_classes;
+        // selectors this tag matched, kept for restyle (hover, media change); text nodes never have any
+        used_selector::vector m_used_styles;
 
         void select_all(const css_selector& selector, elements_list& res) override;
+        // offset of the attribute's name in m_attrs, or std::string::npos
+        size_t find_attr(const char* name) const;
 
       public:
         explicit html_tag(const std::shared_ptr<document>& doc);
@@ -50,15 +54,23 @@ namespace litehtml
         {
             return m_classes;
         }
-        const string_vector& str_classes() const
+        // class names as set (lowercased in quirks mode), rebuilt from the class ids
+        string_vector str_classes() const
         {
-            return m_str_classes;
+            string_vector ret;
+            ret.reserve(m_classes.size());
+            for(string_id cls : m_classes)
+            {
+                ret.push_back(_s(cls));
+            }
+            return ret;
         }
 
         void        set_attr(const char* name, const char* val) override;
         void        remove_attr(const char* name) override;
         const char* get_attr(const char* name, const char* def = nullptr) const override;
         void        apply_stylesheet(const litehtml::css& stylesheet) override;
+        void        apply_stylesheets_and_compute(const litehtml::css& author, const litehtml::css& user) override;
         void        refresh_styles() override;
 
         bool is_white_space() const override;
@@ -73,6 +85,7 @@ namespace litehtml
         bool set_pseudo_class(string_id cls, bool add) override;
         bool set_class(const char* pclass, bool add) override;
         bool is_replaced() const override;
+        bool requires_styles_update() override;
         void compute_styles(bool recursive = true) override;
         void draw(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip,
                   const std::shared_ptr<render_item>& ri) override;
@@ -134,6 +147,8 @@ namespace litehtml
 
       private:
         void handle_counter_properties();
+        // matches the stylesheet against this tag only (apply_stylesheet without the recursion)
+        void apply_selectors(const litehtml::css& stylesheet);
     };
 
     /************************************************************************/

@@ -73,6 +73,11 @@ namespace litehtml
 
         void subst_vars(const html_tag* el);
 
+        // Drops every declaration except custom properties (--name). Called after an element's style is
+        // computed: descendants read only their ancestors' custom properties (var()), and refresh_styles
+        // rebuilds the full set from the element's used selectors before any recompute.
+        void retain_custom_properties();
+
       private:
         void inherit_property(string_id name, bool important);
 

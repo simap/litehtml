@@ -107,14 +107,32 @@ namespace litehtml
         std::weak_ptr<document>               m_doc;
         elements_list                         m_children;
         const css_properties*                 m_css; // interned, owned by the document (see set_css)
+        // render items of this element in creation order: the first inline, later ones (rare) in a vector
         render_item_refs                      m_renders;
-        used_selector::vector                 m_used_styles;
 
         virtual void select_all(const css_selector& selector, elements_list& res);
         element::ptr _add_before_after(int type, const style& style);
 
+        // Calls f(const std::shared_ptr<render_item>&) for every live render item in creation order until f
+        // returns false.
+        template <class F> void for_each_render(F&& f) const
+        {
+            for(const auto& weak_ri : m_renders)
+            {
+                if(auto ri = weak_ri.lock())
+                {
+                    if(!f(ri))
+                    {
+                        return;
+                    }
+                }
+            }
+        }
+
       private:
-        std::map<string_id, int> m_counter_values;
+        // null until a counter is reset or incremented on this element (few elements have one)
+        std::unique_ptr<std::map<string_id, int>> m_counter_values;
+        std::map<string_id, int>&                 counter_values();
 
       public:
         explicit element(const std::shared_ptr<document>& doc);
@@ -151,7 +169,7 @@ namespace litehtml
         bool is_table_skip() const;
 
         std::shared_ptr<document>                  get_document() const;
-        const std::list<std::shared_ptr<element>>& children() const;
+        const elements_list&                       children() const;
 
         std::shared_ptr<render_item> get_render_item();
 
@@ -175,6 +193,11 @@ namespace litehtml
         virtual void        remove_attr(const char* name);
         virtual const char* get_attr(const char* name, const char* def = nullptr) const;
         virtual void        apply_stylesheet(const litehtml::css& stylesheet);
+        // For each element in document order: apply author, apply user, compute the style. Same result as
+        // apply_stylesheet(author) and apply_stylesheet(user) over the tree followed by compute_styles(), as long
+        // as the user stylesheet has no counter properties, but an element's full declared style only lives until
+        // its own compute instead of until the whole tree is styled.
+        virtual void apply_stylesheets_and_compute(const litehtml::css& author, const litehtml::css& user);
         virtual void        refresh_styles();
         virtual bool        is_white_space() const;
         virtual bool        is_space() const;
@@ -226,8 +249,9 @@ namespace litehtml
         std::tuple<element::ptr, element::ptr, element::ptr> split_inlines();
         virtual std::shared_ptr<render_item> create_render_item(const std::shared_ptr<render_item>& parent_ri);
 
-        bool requires_styles_update();
-        void add_render(const std::shared_ptr<render_item>& ri);
+        // true if a selector this element matched (or did not) changes result, see html_tag::m_used_styles
+        virtual bool requires_styles_update();
+        void         add_render(const std::shared_ptr<render_item>& ri);
         bool find_styles_changes(const std::function<void(const position&)>& redraw_box);
 
         element::ptr add_pseudo_before(const style& style)
@@ -314,17 +338,13 @@ namespace litehtml
                css().get_display() == display_table || css().get_display() == display_list_item;
     }
 
-    inline const std::list<std::shared_ptr<element>>& element::children() const
+    inline const elements_list& element::children() const
     {
         return m_children;
     }
 
     inline std::shared_ptr<render_item> element::get_render_item()
     {
-        if(m_renders.empty())
-        {
-            return nullptr;
-        }
         return m_renders.front().lock();
     }
 } // namespace litehtml

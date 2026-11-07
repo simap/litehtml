@@ -39,29 +39,25 @@ namespace litehtml
     {
         position pos;
         bool     is_first = true;
-        for(const auto& ri_el : m_renders)
-        {
-            auto ri = ri_el.lock();
-            if(ri)
+        for_each_render([&](const std::shared_ptr<render_item>& ri) {
+            position ri_pos = ri->get_placement();
+            if(is_first)
             {
-                position ri_pos = ri->get_placement();
-                if(is_first)
+                is_first = false;
+                pos      = ri_pos;
+            } else
+            {
+                if(pos.x < ri_pos.x)
                 {
-                    is_first = false;
-                    pos      = ri_pos;
-                } else
+                    pos.x = ri_pos.x;
+                }
+                if(pos.y < ri_pos.y)
                 {
-                    if(pos.x < ri_pos.x)
-                    {
-                        pos.x = ri_pos.x;
-                    }
-                    if(pos.y < ri_pos.y)
-                    {
-                        pos.y = ri_pos.y;
-                    }
+                    pos.y = ri_pos.y;
                 }
             }
-        }
+            return true;
+        });
         return pos;
     }
 
@@ -186,14 +182,23 @@ namespace litehtml
         return ret;
     }
 
-    bool element::requires_styles_update()
+    bool element::requires_styles_update() LITEHTML_RETURN_FUNC(false);
+
+    void element::apply_stylesheets_and_compute(const litehtml::css& author, const litehtml::css& user)
+    {
+        apply_stylesheet(author);
+        apply_stylesheet(user);
+        compute_styles();
+    }
+
+    bool html_tag::requires_styles_update()
     {
         for(const auto& used_style : m_used_styles)
         {
-            if(used_style->m_selector->is_media_valid())
+            if(used_style.selector().is_media_valid())
             {
-                int res = select(*(used_style->m_selector), true);
-                if((res == select_no_match && used_style->m_used) || (res == select_match && !used_style->m_used))
+                int res = select(used_style.selector(), true);
+                if((res == select_no_match && used_style.used()) || (res == select_match && !used_style.used()))
                 {
                     return true;
                 }
@@ -219,14 +224,10 @@ namespace litehtml
         if(requires_styles_update())
         {
             auto process_boxes = [&](const std::shared_ptr<element>& el) {
-                for(const auto& weak_ri : el->m_renders)
-                {
-                    auto ri = weak_ri.lock();
-                    if(ri)
-                    {
-                        ri->get_rendering_boxes(redraw_box);
-                    }
-                }
+                el->for_each_render([&](const std::shared_ptr<render_item>& ri) {
+                    ri->get_rendering_boxes(redraw_box);
+                    return true;
+                });
             };
             process_boxes(shared_from_this());
             for(auto& el : m_children)
@@ -309,17 +310,20 @@ namespace litehtml
             element::ptr current = shared_from_this();
             while(current != nullptr)
             {
-                auto map_iterator = current->m_counter_values.find(counter_name_id);
-                if(map_iterator != current->m_counter_values.end())
+                if(current->m_counter_values)
                 {
-                    values.push_back(std::to_string(map_iterator->second));
+                    auto map_iterator = current->m_counter_values->find(counter_name_id);
+                    if(map_iterator != current->m_counter_values->end())
+                    {
+                        values.push_back(std::to_string(map_iterator->second));
+                    }
                 }
                 current = current->parent();
             }
             if(values.empty())
             {
                 // if no counter is found, instance one with value '0'
-                shared_from_this()->m_counter_values[counter_name_id] = 0;
+                counter_values()[counter_name_id] = 0;
                 result                                                = "0";
             } else
             {
@@ -336,10 +340,13 @@ namespace litehtml
 
         while(current != nullptr)
         {
-            map_iterator = current->m_counter_values.find(counter_name_id);
-            if(map_iterator != current->m_counter_values.end())
+            if(current->m_counter_values)
             {
-                return true;
+                map_iterator = current->m_counter_values->find(counter_name_id);
+                if(map_iterator != current->m_counter_values->end())
+                {
+                    return true;
+                }
             }
 
             // on each level, search previous siblings too
@@ -347,10 +354,13 @@ namespace litehtml
             std::reverse(siblings.begin(), siblings.end());
             for(const element::ptr& sibling : siblings)
             {
-                map_iterator = sibling->m_counter_values.find(counter_name_id);
-                if(map_iterator != sibling->m_counter_values.end())
+                if(sibling->m_counter_values)
                 {
-                    return true;
+                    map_iterator = sibling->m_counter_values->find(counter_name_id);
+                    if(map_iterator != sibling->m_counter_values->end())
+                    {
+                        return true;
+                    }
                 }
             }
             current = current->parent();
@@ -405,21 +415,26 @@ namespace litehtml
         } else
         {
             // if counter is not found, initialize one on this element
-            m_counter_values[counter_name_id] = increment;
+            counter_values()[counter_name_id] = increment;
         }
     }
 
     void litehtml::element::reset_counter(const string_id& counter_name_id, int value)
     {
-        m_counter_values[counter_name_id] = value;
+        counter_values()[counter_name_id] = value;
+    }
+
+    std::map<string_id, int>& litehtml::element::counter_values()
+    {
+        if(!m_counter_values)
+        {
+            m_counter_values = std::make_unique<std::map<string_id, int>>();
+        }
+        return *m_counter_values;
     }
 
     pixel_t litehtml::element::v_scroll(pixel_t dy) const
     {
-        if(m_renders.empty())
-        {
-            return 0_px;
-        }
         auto ri_el = m_renders.front().lock();
         if(!ri_el)
         {
@@ -430,10 +445,6 @@ namespace litehtml
 
     pixel_t litehtml::element::h_scroll(pixel_t dx) const
     {
-        if(m_renders.empty())
-        {
-            return 0_px;
-        }
         auto ri_el = m_renders.front().lock();
         if(!ri_el)
         {
@@ -444,17 +455,7 @@ namespace litehtml
 
     void litehtml::element::run_on_renderers(const std::function<bool(const std::shared_ptr<render_item>&)>& func)
     {
-        for(const auto& weak_ri : m_renders)
-        {
-            auto ri = weak_ri.lock();
-            if(ri)
-            {
-                if(!func(ri))
-                {
-                    break;
-                }
-            }
-        }
+        for_each_render(func);
     }
 
     const background* element::get_background(bool /*own_only*/) LITEHTML_RETURN_FUNC(nullptr);
