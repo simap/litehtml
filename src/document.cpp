@@ -373,27 +373,29 @@ namespace litehtml
             {
                 if(process_root)
                 {
-                    string_map      attrs;
-                    GumboAttribute* attr = nullptr;
-                    for(unsigned int i = 0; i < node->v.element.attributes.length; i++)
-                    {
-                        attr              = static_cast<GumboAttribute*>(node->v.element.attributes.data[i]);
-                        attrs[attr->name] = attr->value;
-                    }
-
                     element::ptr ret;
                     const char*  tag = gumbo_normalized_tagname(node->v.element.tag);
-                    if(tag[0])
                     {
-                        ret = create_element(tag, attrs);
-                    } else
-                    {
-                        if(node->v.element.original_tag.data && node->v.element.original_tag.length)
+                        // a transient copy for create_element (and the container); it is gone before the
+                        // subtree is converted, instead of living on every level of the recursion
+                        string_map attrs;
+                        for(unsigned int i = 0; i < node->v.element.attributes.length; i++)
                         {
-                            std::string str;
-                            gumbo_tag_from_original_text(&node->v.element.original_tag);
-                            str.append(node->v.element.original_tag.data, node->v.element.original_tag.length);
-                            ret = create_element(str.c_str(), attrs);
+                            auto* attr        = static_cast<GumboAttribute*>(node->v.element.attributes.data[i]);
+                            attrs[attr->name] = attr->value;
+                        }
+                        if(tag[0])
+                        {
+                            ret = create_element(tag, attrs);
+                        } else
+                        {
+                            if(node->v.element.original_tag.data && node->v.element.original_tag.length)
+                            {
+                                std::string str;
+                                gumbo_tag_from_original_text(&node->v.element.original_tag);
+                                str.append(node->v.element.original_tag.data, node->v.element.original_tag.length);
+                                ret = create_element(str.c_str(), attrs);
+                            }
                         }
                     }
                     if(!strcmp(tag, "script") || !strcmp(tag, "style")) // EXP: style text as one node
@@ -462,7 +464,7 @@ namespace litehtml
             break;
         case GUMBO_NODE_WHITESPACE:
             {
-                std::string str = node->v.text.text;
+                const char* str = node->v.text.text;
                 // EXP: one el_space per whitespace-only node, except where newlines can matter
                 const GumboNode* par = node->parent;
                 bool keep = par && par->type == GUMBO_NODE_ELEMENT &&
@@ -470,11 +472,12 @@ namespace litehtml
                              par->v.element.tag == GUMBO_TAG_LISTING || par->v.element.tag == GUMBO_TAG_PLAINTEXT);
                 if(!keep)
                 {
-                    elements.push_back(std::make_shared<el_space>(str.c_str(), shared_from_this()));
+                    elements.push_back(std::make_shared<el_space>(str, shared_from_this()));
                 } else
-                    for(size_t i = 0; i < str.length(); i++)
+                    for(; *str; str++)
                     {
-                        elements.push_back(std::make_shared<el_space>(str.substr(i, 1).c_str(), shared_from_this()));
+                        const char ch[2] = {*str, 0};
+                        elements.push_back(std::make_shared<el_space>(ch, shared_from_this()));
                     }
             }
             break;
