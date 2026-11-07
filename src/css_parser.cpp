@@ -12,6 +12,29 @@ namespace litehtml
 
         size_t null_count = std::count(input.begin(), input.end(), 0);
 
+        if(null_count == 0)
+        {
+            // the output is never longer than the input: filter in place, no second copy of the text
+            size_t j = 0;
+            for(size_t i = 0; i < input.size(); i++)
+            {
+                char ch = input[i];
+                if(ch == '\r')
+                {
+                    input[j++] = '\n';
+                    if(i + 1 < input.size() && input[i + 1] == '\n')
+                    {
+                        i++; // skip \n after \r
+                    }
+                } else
+                {
+                    input[j++] = ch == '\f' ? '\n' : ch;
+                }
+            }
+            input.resize(j);
+            return;
+        }
+
         std::string result(input.size() + 2 * null_count, 0);
 
         for(int i = 0, j = 0; i < static_cast<int>(input.size()); i++)
@@ -39,7 +62,77 @@ namespace litehtml
 
         // trim trailing NULs
         result.resize(strlen(result.c_str()));
-        input = result;
+        input = std::move(result);
+    }
+
+    // True if decoding input as UTF-8 and filtering code points would both return it unchanged: no BOM, valid
+    // UTF-8 per https://encoding.spec.whatwg.org/#utf-8-decoder, and no CR, FF or NUL.
+    static bool is_plain_css_input(const std::string& input)
+    {
+        const auto* p = reinterpret_cast<const unsigned char*>(input.data());
+        size_t      n = input.size();
+        if(n >= 3 && p[0] == 0xEF && p[1] == 0xBB && p[2] == 0xBF)
+        {
+            return false;
+        }
+        for(size_t i = 0; i < n;)
+        {
+            unsigned c = p[i];
+            if(c < 0x80)
+            {
+                if(c == '\r' || c == '\f' || c == 0)
+                {
+                    return false;
+                }
+                i++;
+                continue;
+            }
+            size_t   len   = 0;
+            unsigned lower = 0x80;
+            unsigned upper = 0xBF;
+            if(c >= 0xC2 && c <= 0xDF)
+            {
+                len = 1;
+            } else if(c >= 0xE0 && c <= 0xEF)
+            {
+                len   = 2;
+                lower = c == 0xE0 ? 0xA0 : lower;
+                upper = c == 0xED ? 0x9F : upper;
+            } else if(c >= 0xF0 && c <= 0xF4)
+            {
+                len   = 3;
+                lower = c == 0xF0 ? 0x90 : lower;
+                upper = c == 0xF4 ? 0x8F : upper;
+            } else
+            {
+                return false;
+            }
+            if(i + len >= n || p[i + 1] < lower || p[i + 1] > upper)
+            {
+                return false;
+            }
+            for(size_t k = 2; k <= len; k++)
+            {
+                if(p[i + k] < 0x80 || p[i + k] > 0xBF)
+                {
+                    return false;
+                }
+            }
+            i += len + 1;
+        }
+        return true;
+    }
+
+    const std::string& prepare_css_input(const std::string& input, std::string& storage)
+    {
+        if(is_plain_css_input(input))
+        {
+            return input;
+        }
+        // decoding potentially broken UTF-8 into valid UTF-8
+        storage = decode(input, encoding::utf_8);
+        filter_code_points(storage);
+        return storage;
     }
 
     static const size_t kLargeSize = 50;
@@ -165,16 +258,17 @@ namespace litehtml
     // https://www.w3.org/TR/css-syntax-3/#parse-stylesheet
     // I don't create a stylesheet because its only purpose is to pass a list of rules to
     // parse_css_stylesheet. I just return the list of rules directly instead.
+    // NOTE: css::parse_css_stylesheet does not use this; it pulls tokens and handles one rule at a time.
     raw_rule::vector css_parser::parse_stylesheet(const std::string& input, bool top_level)
     {
         // 1. If input is a byte stream for stylesheet, decode bytes from input, and set input to the result.
         // not implemented, utf-8 is always assumed
-        std::string str = decode(input, encoding::utf_8); // decoding potentially broken UTF-8 into valid UTF-8
-
         // 2. Normalize input, and set input to the result.
-        auto tokens = normalize(str);
+        std::string        storage;
+        const std::string& str = prepare_css_input(input, storage);
+        css_tokenizer      tokenizer(str);
 
-        return parse_stylesheet(tokens, top_level);
+        return css_parser(tokenizer).consume_list_of_rules(top_level);
     }
     raw_rule::vector css_parser::parse_stylesheet(const css_token_vector& input, bool top_level)
     {
@@ -186,22 +280,57 @@ namespace litehtml
     }
 
     // https://www.w3.org/TR/css-syntax-3/#consume-the-next-input-token
-    css_token css_parser::next_token()
+    static const css_token& eof_token()
     {
-        if(m_index == static_cast<int>(m_tokens.size()))
-        {
-            return css_token_type(EOF);
-        }
-        return m_tokens[m_index++];
+        static const css_token eof(_EOF);
+        return eof;
     }
 
-    css_token css_parser::peek_token()
+    const css_token& css_parser::next_token()
     {
-        if(m_index == static_cast<int>(m_tokens.size()))
+        if(m_tokenizer)
         {
-            return css_token_type(EOF);
+            if(m_reconsume)
+            {
+                m_reconsume = false;
+            } else
+            {
+                m_current = m_tokenizer->next_token();
+            }
+            return m_current;
         }
-        return m_tokens[m_index];
+        if(m_index == static_cast<int>(m_tokens->size()))
+        {
+            return eof_token();
+        }
+        return (*m_tokens)[m_index++];
+    }
+
+    const css_token& css_parser::peek_token()
+    {
+        if(m_tokenizer)
+        {
+            next_token();
+            m_reconsume = true;
+            return m_current;
+        }
+        if(m_index == static_cast<int>(m_tokens->size()))
+        {
+            return eof_token();
+        }
+        return (*m_tokens)[m_index];
+    }
+
+    // Only called right after next_token returned a token that is not EOF.
+    void css_parser::reconsume()
+    {
+        if(m_tokenizer)
+        {
+            m_reconsume = true;
+        } else
+        {
+            m_index--;
+        }
     }
 
     // https://www.w3.org/TR/css-syntax-3/#consume-list-of-rules
@@ -209,60 +338,55 @@ namespace litehtml
     {
         raw_rule::vector rules;
         raw_rule::ptr    rule;
-
-        while(true)
+        while(consume_rule(top_level, rule))
         {
-            // Repeatedly consume the next input token:
-            css_token token = next_token();
-
-            switch(token.type)
+            // If anything is returned, append it to the list of rules.
+            if(rule)
             {
-            case WHITESPACE:
-                break; // Do nothing.
-
-            case EOF:
-                return rules; // Return the list of rules.
-
-            case CDO:
-            case CDC:
-                // If the top-level flag is set, do nothing.
-                if(top_level)
-                {
-                    break;
-                }
-
-                // Otherwise, reconsume the current input token. Consume a qualified rule.
-                // If anything is returned, append it to the list of rules.
-                m_index--;
-                rule = consume_qualified_rule();
-                if(rule)
-                {
-                    rules.push_back(rule);
-                }
-                break;
-
-            case AT_KEYWORD:
-                // Reconsume the current input token. Consume an at-rule, and append the returned value to the list of
-                // rules.
-                m_index--;
-                rule = consume_at_rule();
-                if(rule)
-                {
-                    rules.push_back(rule);
-                }
-                break;
-
-            default:
-                // Reconsume the current input token. Consume a qualified rule. If anything is returned, append it to
-                // the list of rules.
-                m_index--;
-                rule = consume_qualified_rule();
-                if(rule)
-                {
-                    rules.push_back(rule);
-                }
-                break;
+                rules.push_back(std::move(rule));
             }
+        }
+        // Return the list of rules.
+        return rules;
+    }
+
+    bool css_parser::consume_rule(bool top_level, raw_rule::ptr& rule)
+    {
+        rule = nullptr;
+
+        // Repeatedly consume the next input token:
+        switch(next_token().type)
+        {
+        case WHITESPACE:
+            return true; // Do nothing.
+
+        case EOF:
+            return false;
+
+        case CDO:
+        case CDC:
+            // If the top-level flag is set, do nothing.
+            if(top_level)
+            {
+                return true;
+            }
+
+            // Otherwise, reconsume the current input token. Consume a qualified rule.
+            reconsume();
+            rule = consume_qualified_rule();
+            return true;
+
+        case AT_KEYWORD:
+            // Reconsume the current input token. Consume an at-rule.
+            reconsume();
+            rule = consume_at_rule();
+            return true;
+
+        default:
+            // Reconsume the current input token. Consume a qualified rule.
+            reconsume();
+            rule = consume_qualified_rule();
+            return true;
         }
     }
 
@@ -276,7 +400,7 @@ namespace litehtml
         while(true)
         {
             // Repeatedly consume the next input token:
-            css_token token = next_token();
+            const css_token& token = next_token();
 
             switch(token.type)
             {
@@ -290,14 +414,13 @@ namespace litehtml
                 return rule;
             case CURLY_BLOCK:
                 // Assign the block to the qualified rule’s block. Return the qualified rule.
-                rule->block = std::move(token);
+                rule->block = token;
                 return rule;
             default:
                 // Reconsume the current input token. Consume a component value. Append the returned value to the
                 // qualified rule’s prelude.
-                m_index--;
-                css_token value = consume_component_value();
-                rule->prelude.push_back(std::move(value));
+                reconsume();
+                rule->prelude.push_back(consume_component_value());
             }
         }
     }
@@ -307,13 +430,12 @@ namespace litehtml
     {
         // Consume the next input token. Create a new at-rule with its name set to the value of the current input token,
         // its prelude initially set to an empty list, and its value initially set to nothing.
-        css_token     token = next_token();
-        raw_rule::ptr rule  = std::make_shared<raw_rule>(raw_rule::at, token.str());
+        raw_rule::ptr rule = std::make_shared<raw_rule>(raw_rule::at, next_token().str());
 
         while(true)
         {
             // Repeatedly consume the next input token:
-            token = next_token();
+            const css_token& token = next_token();
 
             switch(token.type)
             {
@@ -329,14 +451,13 @@ namespace litehtml
                 return rule;
             case CURLY_BLOCK:
                 // Assign the block to the at-rule’s block. Return the at-rule.
-                rule->block = std::move(token);
+                rule->block = token;
                 return rule;
             default:
                 // Reconsume the current input token. Consume a component value. Append the returned value to the
                 // at-rule’s prelude.
-                m_index--;
-                css_token value = consume_component_value();
-                rule->prelude.push_back(std::move(value));
+                reconsume();
+                rule->prelude.push_back(consume_component_value());
             }
         }
     }
@@ -356,11 +477,11 @@ namespace litehtml
         while(true)
         {
             // Repeatedly consume the next input token and process it as follows:
-            css_token token = next_token();
+            int type = next_token().type;
 
-            if(token.type == closing_bracket || token.type == EOF)
+            if(type == closing_bracket || type == EOF)
             {
-                if(token.type == EOF)
+                if(type == EOF)
                 {
                     css_parse_error("eof in simple block");
                 }
@@ -369,9 +490,8 @@ namespace litehtml
                 return block;
             }
             // Reconsume the current input token. Consume a component value and append it to the value of the block.
-            m_index--;
-            css_token val = consume_component_value();
-            block.value.push_back(std::move(val));
+            reconsume();
+            block.value.push_back(consume_component_value());
         }
     }
 
@@ -379,7 +499,7 @@ namespace litehtml
     css_token css_parser::consume_component_value()
     {
         // Consume the next input token.
-        css_token token = next_token();
+        const css_token& token = next_token();
 
         switch(token.type)
         {
@@ -390,11 +510,17 @@ namespace litehtml
             return consume_simple_block(static_cast<char>(token.ch));
 
             // Otherwise, if the current input token is a <function-token>, consume a function and return it.
+            // (consume_function copies the name before it reads the next token, which may overwrite token)
         case FUNCTION:
             return consume_function(token.name());
 
             // Otherwise, return the current input token.
         default:
+            if(m_tokenizer)
+            {
+                // token is m_current; it is not reconsumed after this, so it can be moved out
+                return std::move(m_current);
+            }
             return token;
         }
     }
@@ -409,9 +535,7 @@ namespace litehtml
         while(true)
         {
             // Repeatedly consume the next input token and process it as follows:
-            css_token token = next_token();
-
-            switch(token.type)
+            switch(next_token().type)
             {
             case ')':
                 function.value.shrink_to_fit();
@@ -425,9 +549,8 @@ namespace litehtml
             default:
                 // Reconsume the current input token. Consume a component value and append the returned value to the
                 // function’s value.
-                m_index--;
-                css_token val = consume_component_value();
-                function.value.push_back(std::move(val));
+                reconsume();
+                function.value.push_back(consume_component_value());
             }
         }
     }
@@ -452,8 +575,7 @@ namespace litehtml
     {
         // Consume the next input token. Create a new declaration with its name set to the value of
         // the current input token and its value initially set to an empty list.
-        css_token       token = next_token();
-        raw_declaration decl  = {token.name(), {}};
+        raw_declaration decl  = {next_token().name(), {}};
         auto&           value = decl.value;
 
         // 1. While the next input token is a <whitespace-token>, consume the next input token.
@@ -510,7 +632,7 @@ namespace litehtml
         while(true)
         {
             // Repeatedly consume the next input token:
-            css_token token = next_token();
+            const css_token& token = next_token();
 
             switch(token.type)
             {
@@ -526,7 +648,7 @@ namespace litehtml
             case AT_KEYWORD:
                 {
                     // Reconsume the current input token. Consume an at-rule, and append the result to rules.
-                    m_index--;
+                    reconsume();
                     auto rule = consume_at_rule();
                     if(rule)
                     {
@@ -551,7 +673,7 @@ namespace litehtml
                     // If anything was returned, append it to decls.
                     if(decl)
                     {
-                        decls.push_back(decl);
+                        decls.push_back(std::move(decl));
                     }
                     break;
                 }
@@ -559,7 +681,7 @@ namespace litehtml
                 {
                     // Reconsume the current input token. Consume a qualified rule. If anything was returned, append it
                     // to rules.
-                    m_index--;
+                    reconsume();
                     auto rule = consume_qualified_rule();
                     if(rule)
                     {
@@ -571,7 +693,7 @@ namespace litehtml
                 // This is a parse error. Reconsume the current input token. As long as the next input token is
                 // anything other than a <;> or <EOF>, consume a component value and throw away the returned value.
                 css_parse_error("unexpected token in a style block");
-                m_index--;
+                reconsume();
                 while(!is_one_of(peek_token().type, ';', EOF))
                 {
                     consume_component_value();

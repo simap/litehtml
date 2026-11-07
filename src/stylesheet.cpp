@@ -131,24 +131,54 @@ namespace litehtml
     }
 
     // https://www.w3.org/TR/css-syntax-3/#parse-a-css-stylesheet
-    template <class Input> // Input == string or css_token_vector
-    void css::parse_css_stylesheet(const Input& input, const std::string& baseurl, const std::shared_ptr<document>& doc,
-                                   const media_query_list_list::ptr& media, bool top_level)
+    void css::parse_css_stylesheet(const std::string& input, const std::string& baseurl,
+                                   const std::shared_ptr<document>& doc, const media_query_list_list::ptr& media,
+                                   bool top_level)
     {
         if(doc && media)
         {
             doc->add_media_list(media);
         }
 
-        // To parse a CSS stylesheet, first parse a stylesheet.
-        auto rules          = css_parser::parse_stylesheet(input, top_level);
+        // To parse a CSS stylesheet, first parse a stylesheet (see css_parser::parse_stylesheet).
+        // 1. Decode and 2. normalize. Tokens are pulled from the tokenizer as the rules are consumed.
+        std::string        storage;
+        const std::string& text = prepare_css_input(input, storage);
+        css_tokenizer      tokenizer(text);
+        css_parser         parser(tokenizer);
+        parse_rules(parser, baseurl, doc, media, top_level);
+    }
+
+    void css::parse_css_stylesheet(const css_token_vector& input, const std::string& baseurl,
+                                   const std::shared_ptr<document>& doc, const media_query_list_list::ptr& media,
+                                   bool top_level)
+    {
+        if(doc && media)
+        {
+            doc->add_media_list(media);
+        }
+
+        css_parser parser(input);
+        parse_rules(parser, baseurl, doc, media, top_level);
+    }
+
+    void css::parse_rules(css_parser& parser, const std::string& baseurl, const std::shared_ptr<document>& doc,
+                          const media_query_list_list::ptr& media, bool top_level)
+    {
         bool import_allowed = top_level;
 
         // Interpret all of the resulting top-level qualified rules as style rules, defined below.
         // If any style rule is invalid, or any at-rule is not recognized or is invalid according
         // to its grammar or context, it's a parse error. Discard that rule.
-        for(const auto& rule : rules)
+        // Each rule is consumed (css_parser::consume_rule is one step of "consume a list of rules"),
+        // interpreted, and dropped before the next one is consumed.
+        raw_rule::ptr rule;
+        while(parser.consume_rule(top_level, rule))
         {
+            if(!rule)
+            {
+                continue;
+            }
             if(rule->type == raw_rule::qualified)
             {
                 if(parse_style_rule(rule, baseurl, doc, media))
