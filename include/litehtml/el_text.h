@@ -31,6 +31,7 @@ namespace litehtml
 
       public:
         el_text(const char* text, const document::ptr& doc);
+        ~el_text() override;
 
         // The text as parsed.
         const char* text() const

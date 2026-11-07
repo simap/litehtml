@@ -39,12 +39,12 @@ namespace litehtml
         m_strings++;
         if(n >= own_block)
         {
-            m_blocks.push_back({std::unique_ptr<char[]>(new char[n]), n});
+            m_blocks.push_back({std::unique_ptr<char[]>(new char[n]), n, true});
             return m_blocks.back().data.get();
         }
         if(n > m_left)
         {
-            m_blocks.push_back({std::unique_ptr<char[]>(new char[chunk_size]), chunk_size});
+            m_blocks.push_back({std::unique_ptr<char[]>(new char[chunk_size]), chunk_size, false});
             m_cur  = m_blocks.back().data.get();
             m_left = chunk_size;
         }
@@ -83,6 +83,20 @@ namespace litehtml
             m_runs.push_back(dst);
         }
         return dst;
+    }
+
+    void text_arena::release(const char* s)
+    {
+        for(auto it = m_blocks.rbegin(); it != m_blocks.rend(); ++it)
+        {
+            if(it->own && it->data.get() == s)
+            {
+                m_used -= it->size;
+                m_strings--;
+                m_blocks.erase(std::next(it).base());
+                return;
+            }
+        }
     }
 
     const char* text_arena::add_pair(const char* a, size_t na, const char* b, size_t nb)

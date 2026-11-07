@@ -19,12 +19,16 @@ namespace litehtml
         const char* add(const char* s, size_t n);
         // Copies a, a NUL, b and a NUL into one block. Returns the copy of a; the copy of b follows its NUL.
         const char* add_pair(const char* a, size_t na, const char* b, size_t nb);
+        // Frees s if it has a block of its own (own_block bytes or more); otherwise does nothing. For text nodes
+        // that are dropped while the document lives, such as the child of <script>, which copies the text.
+        void release(const char* s);
 
       private:
         struct block
         {
             std::unique_ptr<char[]> data;
             size_t                  size;
+            bool                    own; // holds one string
         };
         static constexpr size_t chunk_size = 2048;  // shared blocks
         static constexpr size_t own_block  = 512;   // strings this long or longer get a block of their own

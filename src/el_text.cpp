@@ -16,6 +16,16 @@ litehtml::el_text::el_text(const char* text, const document::ptr& doc) :
     modify_css([](css_properties& c) { c.set_display(display_inline_text); });
 }
 
+litehtml::el_text::~el_text()
+{
+    // While the document lives, give back a long text that has a block of its own. When the document is being
+    // destroyed, get_document() is null and the arena goes with it.
+    if(document::ptr doc = get_document())
+    {
+        doc->texts().release(m_text);
+    }
+}
+
 const char* litehtml::el_text::shown_text() const
 {
     switch(m_shown)
@@ -96,8 +106,10 @@ void litehtml::el_text::compute_styles(bool /*recursive*/)
             m_shown = shown_original;
         } else if(m_shown != shown_transformed || tt != shown_text())
         {
-            m_text  = get_document()->texts().add_pair(m_text, strlen(m_text), tt.c_str(), tt.length());
-            m_shown = shown_transformed;
+            const char* old = m_text;
+            m_text          = get_document()->texts().add_pair(m_text, strlen(m_text), tt.c_str(), tt.length());
+            m_shown         = shown_transformed;
+            get_document()->texts().release(old);
         }
     } else
     {
